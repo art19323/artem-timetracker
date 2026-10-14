@@ -581,6 +581,13 @@
       padding: 6px 6px 6px 12px;
     }
 
+    .quick-timer input[type="text"] {
+      width: 190px;
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-size: 13px;
+    }
+
     .quick-timer select {
       width: auto;
       max-width: 190px;
@@ -768,6 +775,7 @@
         <div class="quick-timer">
           <select id="quickProjectSelect" title="Проект"></select>
           <select id="quickTaskSelect" title="Задача"></select>
+          <input id="quickNewTaskInput" type="text" class="hidden" placeholder="Название задачи, Enter" maxlength="140" />
           <select id="quickStageSelect" title="Этап работ"></select>
           <div class="quick-clock" id="quickClock">0:00:00</div>
           <button class="quick-play" id="quickTimerBtn" type="button" title="Запустить таймер">▶</button>
@@ -2614,6 +2622,57 @@
       }
     }
 
+    function setQuickNewTaskMode(on) {
+      quickNewTaskMode = Boolean(on);
+      const select = document.getElementById('quickTaskSelect');
+      const input = document.getElementById('quickNewTaskInput');
+      if (!select || !input) return;
+      select.classList.toggle('hidden', quickNewTaskMode);
+      input.classList.toggle('hidden', !quickNewTaskMode);
+      if (quickNewTaskMode) {
+        input.value = '';
+        input.focus();
+      }
+    }
+
+    // Создаёт задачу из того, что вписали в шапке; по желанию сразу запускает таймер.
+    function createQuickTask(startTimer) {
+      const projectId = document.getElementById('quickProjectSelect')?.value;
+      const project = getProjectById(projectId);
+      const input = document.getElementById('quickNewTaskInput');
+      const name = (input ? input.value : '').trim();
+
+      if (!project) {
+        alert('Сначала выберите проект.');
+        return null;
+      }
+      if (!name) {
+        alert('Впишите название задачи.');
+        return null;
+      }
+
+      const now = new Date().toISOString();
+      const stage = document.getElementById('quickStageSelect')?.value || null;
+      const task = {
+        id: generateId('task'),
+        projectId: project.id,
+        name,
+        status: 'active',
+        stage,
+        estimateHours: null,
+        createdAt: now,
+        updatedAt: now
+      };
+      state.tasks.push(task);
+      setQuickNewTaskMode(false);
+      saveState();
+      renderAll();
+      const select = document.getElementById('quickTaskSelect');
+      if (select) select.value = task.id;
+      if (startTimer) startTimer(task.id, stage);
+      return task;
+    }
+
     function renderQuickTimerOptions() {
       const projectSelect = document.getElementById('quickProjectSelect');
       const taskSelect = document.getElementById('quickTaskSelect');
@@ -2639,6 +2698,8 @@
         .map(task => `<option value="${escapeHtml(task.id)}">${escapeHtml(task.name)}</option>`)
         .join('');
       if (wantedTask && tasks.some(task => task.id === wantedTask)) taskSelect.value = wantedTask;
+      taskSelect.innerHTML += '<option value="__new__">✏️ Новая задача…</option>';
+      if (quickNewTaskMode) taskSelect.value = '__new__';
 
       // Этап работ: список — только этапы выбранного проекта.
       const stageSelect = document.getElementById('quickStageSelect');
@@ -2652,6 +2713,13 @@
       if (wantedStage && Array.from(stageSelect.options).some(option => option.value === wantedStage)) {
         stageSelect.value = wantedStage;
       }
+
+      // режим ручного ввода задачи держим при перерисовке
+      const newInput = document.getElementById('quickNewTaskInput');
+      if (newInput) {
+        taskSelect.classList.toggle('hidden', quickNewTaskMode);
+        newInput.classList.toggle('hidden', !quickNewTaskMode);
+      }
     }
 
     function releaseQuickTimer() {
@@ -2660,6 +2728,12 @@
       const stage = document.getElementById('quickStageSelect')?.value || null;
       if (!getProjectById(projectId)) {
         alert('Сначала выберите проект.');
+        return;
+      }
+      if (taskId === '__new__' || quickNewTaskMode) {
+        // ждём название: напишет и нажмёт Enter — задача создастся и таймер пойдёт
+        quickStartAfterCreate = true;
+        setQuickNewTaskMode(true);
         return;
       }
       if (taskId) startTimer(taskId, stage);
@@ -3178,10 +3252,29 @@
         renderQuickTimerOptions();
       });
       document.getElementById('quickTaskSelect').addEventListener('change', (event) => {
+        if (event.target.value === '__new__') {
+          quickStartAfterCreate = false;
+          setQuickNewTaskMode(true);
+          return;
+        }
         // при выборе задачи подставляем её этап, если он задан
         const task = state.tasks.find(item => item.id === event.target.value);
         const stageSelect = document.getElementById('quickStageSelect');
         if (task && task.stage && stageSelect) stageSelect.value = task.stage;
+      });
+
+      const quickNewTaskInput = document.getElementById('quickNewTaskInput');
+      quickNewTaskInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          const startNow = quickStartAfterCreate;
+          quickStartAfterCreate = false;
+          createQuickTask(startNow);
+        } else if (event.key === 'Escape') {
+          quickStartAfterCreate = false;
+          setQuickNewTaskMode(false);
+          renderQuickTimerOptions();
+        }
       });
     }
 
@@ -3225,6 +3318,8 @@
     }
 
     let summaryTimerInterval = null;
+    let quickNewTaskMode = false;        // в шапке пишем новую задачу руками
+    let quickStartAfterCreate = false;   // …и сразу стартуем таймер
 
     function startUiRefreshLoop() {
       if (summaryTimerInterval) {
