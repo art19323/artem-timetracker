@@ -758,34 +758,6 @@
 
 
 
-        <div class="box" style="margin-bottom: 16px;">
-          <div class="box-title">
-            <h3>Синхронизация</h3>
-            <span class="pill" id="syncStatusPill">Не подключена</span>
-          </div>
-          <label>
-            Токен GitHub (право gist)
-            <input id="syncTokenInput" type="password" placeholder="github_pat_…" autocomplete="off" />
-          </label>
-          <div style="height: 10px;"></div>
-          <label>
-            ID гиста с данными
-            <input id="syncGistInput" type="text" />
-          </label>
-          <div class="inline-note" id="syncStatusNote">
-            Токен GitHub хранится только в этом браузере и не попадает в файл страницы. Право токена — gist.
-          </div>
-          <div style="height: 12px;"></div>
-          <div class="controls">
-            <button class="btn btn-primary" id="syncConnectBtn" type="button">Подключить / синхронизировать</button>
-          </div>
-          <div style="height: 8px;"></div>
-          <div class="controls">
-            <button class="btn tiny" id="syncPullBtn" type="button">Взять из облака</button>
-            <button class="btn tiny" id="syncPushBtn" type="button">Отправить в облако</button>
-            <button class="btn tiny btn-danger" id="syncDisconnectBtn" type="button">Отключить</button>
-          </div>
-        </div>
         <div class="box" style="margin: 16px 0;">
           <div class="box-title">
             <h3 id="projectFormTitle">Новый проект</h3>
@@ -830,6 +802,34 @@
           </form>
         </div>
 
+<div class="box" style="margin-bottom: 16px;">
+          <div class="box-title">
+            <h3>Синхронизация</h3>
+            <span class="pill" id="syncStatusPill">Не подключена</span>
+          </div>
+          <label>
+            Токен GitHub (право gist)
+            <input id="syncTokenInput" type="password" placeholder="github_pat_…" autocomplete="off" />
+          </label>
+          <div style="height: 10px;"></div>
+          <label>
+            ID гиста с данными
+            <input id="syncGistInput" type="text" />
+          </label>
+          <div class="inline-note" id="syncStatusNote">
+            Токен GitHub хранится только в этом браузере и не попадает в файл страницы. Право токена — gist.
+          </div>
+          <div style="height: 12px;"></div>
+          <div class="controls">
+            <button class="btn btn-primary" id="syncConnectBtn" type="button">Подключить / синхронизировать</button>
+          </div>
+          <div style="height: 8px;"></div>
+          <div class="controls">
+            <button class="btn tiny" id="syncPullBtn" type="button">Взять из облака</button>
+            <button class="btn tiny" id="syncPushBtn" type="button">Отправить в облако</button>
+            <button class="btn tiny btn-danger" id="syncDisconnectBtn" type="button">Отключить</button>
+          </div>
+        </div>
       </aside>
 
       <main class="main panel section">
