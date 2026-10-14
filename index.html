@@ -656,7 +656,7 @@
       <div class="card">
         <div class="card-label">Средняя эффективная ставка</div>
         <div class="card-value" id="summaryEffectiveRate">Нет данных</div>
-        <div class="card-sub">По всем проектам с учетом часов</div>
+        <div class="card-sub" id="summaryEffectiveRateSub">Считается только по завершённым проектам</div>
       </div>
       <div class="card">
         <div class="card-label">Активный таймер</div>
@@ -666,12 +666,12 @@
       <div class="card">
         <div class="card-label">Часы за выбранную неделю</div>
         <div class="card-value" id="summaryWeekHours">0.00</div>
-        <div class="card-sub">Сумма по всем проектам</div>
+        <div class="card-sub" id="summaryWeekHoursSub">Сумма по всем проектам</div>
       </div>
       <div class="card">
         <div class="card-label">Среднее за день</div>
         <div class="card-value" id="summaryWeekAvg">0.00</div>
-        <div class="card-sub">За 7 дней выбранной недели</div>
+        <div class="card-sub">За 5 рабочих дней недели</div>
       </div>
     </div>
 
@@ -1000,6 +1000,8 @@
       };
     }
 
+    // Средняя эффективная ставка считается только по завершённым проектам:
+    // незавершённые ещё наберут часы и занизят картину.
     function getOverallMetrics() {
       const totalHours = state.timeEntries.reduce((sum, entry) => sum + calculateEntryHours(entry), 0);
       const totalNetIncome = state.projects.reduce((sum, project) => {
@@ -1008,11 +1010,22 @@
       const effectiveRate = totalHours > 0 ? (totalNetIncome / totalHours) : null;
       const activeProjects = state.projects.filter(project => project.status === 'active').length;
 
+      const finishedProjects = state.projects.filter(project => project.status === 'done');
+      const finishedHours = finishedProjects.reduce((sum, project) => sum + calculateProjectHours(project.id), 0);
+      const finishedNetIncome = finishedProjects.reduce((sum, project) => {
+        return sum + ((Number(project.price) || 0) - (Number(project.expenses) || 0));
+      }, 0);
+      const finishedRate = finishedHours > 0 ? (finishedNetIncome / finishedHours) : null;
+
       return {
         totalHours,
         totalNetIncome,
         effectiveRate,
-        activeProjects
+        activeProjects,
+        finishedCount: finishedProjects.length,
+        finishedHours,
+        finishedNetIncome,
+        finishedRate
       };
     }
 
@@ -1098,14 +1111,41 @@
       return map;
     }
 
+    const WORK_DAYS_PER_WEEK = 5;   // он работает пять дней в неделю
+
     function getWeekMetrics() {
       const entries = getWeekEntries();
       const totalWeekHours = entries.reduce((sum, entry) => sum + calculateEntryHours(entry), 0);
-      const averagePerDay = totalWeekHours / 7;
+      const averagePerDay = totalWeekHours / WORK_DAYS_PER_WEEK;
       return {
         totalWeekHours,
         averagePerDay
       };
+    }
+
+    // Среднее по неделям, которые уже закончились: от недели первой записи
+    // до прошлой недели включительно. Недели без записей считаются нулём.
+    function getCompletedWeeksAverage() {
+      if (state.timeEntries.length === 0) return 0;
+      const starts = state.timeEntries
+        .map(entry => getStartOfWeek(new Date(entry.startedAt)).getTime())
+        .filter(value => !Number.isNaN(value));
+      if (starts.length === 0) return 0;
+
+      const firstWeek = new Date(Math.min(...starts));
+      const currentWeek = getStartOfWeek(new Date());
+      const weeks = Math.max(0, Math.round((currentWeek.getTime() - firstWeek.getTime()) / (7 * 24 * 3600000)));
+      if (weeks <= 0) return 0;
+
+      const completedEnd = currentWeek.getTime();
+      const completedHours = state.timeEntries
+        .filter(entry => {
+          const started = new Date(entry.startedAt).getTime();
+          return started >= firstWeek.getTime() && started < completedEnd;
+        })
+        .reduce((sum, entry) => sum + calculateEntryHours(entry), 0);
+
+      return completedHours / weeks;
     }
 
     function renderSummary() {
@@ -1120,12 +1160,15 @@
       document.getElementById('summaryNetIncome').textContent = formatMoney(metrics.totalNetIncome);
 
       const effectiveRateElement = document.getElementById('summaryEffectiveRate');
-      if (metrics.effectiveRate === null) {
+      const effectiveRateSubElement = document.getElementById('summaryEffectiveRateSub');
+      if (metrics.finishedRate === null) {
         effectiveRateElement.textContent = 'Нет данных';
         effectiveRateElement.className = 'card-value';
+        effectiveRateSubElement.textContent = 'Завершённых проектов пока нет — считать не по чему';
       } else {
-        effectiveRateElement.textContent = `${formatMoney(metrics.effectiveRate)}/ч`;
-        effectiveRateElement.className = 'card-value ' + (metrics.effectiveRate >= state.settings.targetRate ? 'good' : 'bad');
+        effectiveRateElement.textContent = `${formatMoney(metrics.finishedRate)}/ч`;
+        effectiveRateElement.className = 'card-value ' + (metrics.finishedRate >= state.settings.targetRate ? 'good' : 'bad');
+        effectiveRateSubElement.textContent = `Только завершённые: ${metrics.finishedCount} проект(а) · ${formatHours(metrics.finishedHours)} ч`;
       }
 
       const activeTimerElement = document.getElementById('summaryActiveTimer');
@@ -1142,6 +1185,8 @@
 
       document.getElementById('summaryWeekHours').textContent = `${formatHours(weekMetrics.totalWeekHours)} ч`;
       document.getElementById('summaryWeekAvg').textContent = `${formatHours(weekMetrics.averagePerDay)} ч`;
+      document.getElementById('summaryWeekHoursSub').textContent =
+        `Сумма по всем проектам · в среднем ${formatHours(getCompletedWeeksAverage())} ч за завершённую неделю`;
       document.getElementById('projectListCount').textContent = String(state.projects.length);
     }
 
