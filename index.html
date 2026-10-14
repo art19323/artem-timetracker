@@ -690,13 +690,20 @@
     }
 
     @media (max-width: 760px) {
-      .stage-row {
-        grid-template-columns: 1.3fr 0.9fr 0.9fr 0.9fr;
-        font-size: 11px;
+      .stage-table {
+        overflow-x: auto;
+        padding-bottom: 4px;
+        -webkit-overflow-scrolling: touch;
       }
 
-      .stage-row > .num.hide-mobile {
-        display: none;
+      .stage-row {
+        grid-template-columns: 1.25fr 0.8fr 0.9fr 0.95fr 0.9fr 0.9fr 0.9fr;
+        min-width: 640px;
+        font-size: 12px;
+      }
+
+      .inline-note.mobile-hint {
+        display: block;
       }
 
       .stage-row .hide-small {
@@ -2003,8 +2010,8 @@
         <div class="stage-row head">
           <span>Этап</span>
           <span class="num">Часы</span>
-          <span class="num">По часам</span>
-          <span class="num">По часам $/м²</span>
+          <span class="num">Стоит по часам</span>
+          <span class="num">Реально $/м²</span>
           <span class="num">Цена этапа</span>
           <span class="num">Цена $/м²</span>
           <span class="num">Дельта</span>
@@ -2069,6 +2076,7 @@
       }
 
       return `<div class="stage-table">${head}${body}${noStageRow}${totalRow}</div>
+        <div class="inline-note mobile-hint" style="margin-top: 6px; display: none;">Таблицу можно прокрутить вбок — все семь колонок сохраняются.</div>
         <div class="inline-note" style="margin-top: 10px">${escapeHtml(note)}</div>`;
     }
 
