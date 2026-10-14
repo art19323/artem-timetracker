@@ -168,7 +168,7 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
-      max-height: 70vh;
+      max-height: 55vh;
       overflow: auto;
       padding-right: 4px;
     }
@@ -567,6 +567,53 @@
       font-weight: 600;
     }
 
+    .quick-timer {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(17, 24, 39, 0.92);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 6px 6px 6px 12px;
+    }
+
+    .quick-timer select {
+      width: auto;
+      max-width: 190px;
+      border-radius: 999px;
+      padding: 7px 10px;
+      font-size: 13px;
+    }
+
+    .quick-clock {
+      font-variant-numeric: tabular-nums;
+      font-size: 20px;
+      font-weight: 700;
+      color: #dbeafe;
+      min-width: 86px;
+      text-align: right;
+    }
+
+    .quick-play {
+      width: 42px;
+      height: 42px;
+      min-width: 42px;
+      border-radius: 50%;
+      background: #6d2b5f;
+      border: 1px solid #8b3a78;
+      color: #ffffff;
+      font-size: 15px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .quick-play.running {
+      background: #9f1239;
+      border-color: #e11d48;
+    }
+
     @media (max-width: 1280px) {
       .summary-grid {
         grid-template-columns: repeat(4, 1fr);
@@ -586,6 +633,15 @@
     }
 
     @media (max-width: 760px) {
+      .quick-timer select {
+        max-width: 118px;
+      }
+
+      .quick-clock {
+        font-size: 17px;
+        min-width: 72px;
+      }
+
       .summary-grid,
       .detail-grid,
       .form-grid,
@@ -629,6 +685,13 @@
         <button class="btn" id="importJsonBtn">Импорт JSON</button>
         <button class="btn" id="exportCsvBtn">Экспорт CSV</button>
         <input type="file" id="importJsonInput" accept=".json,application/json" class="hidden" />
+
+        <div class="quick-timer">
+          <select id="quickProjectSelect" title="Проект"></select>
+          <select id="quickTaskSelect" title="Задача"></select>
+          <div class="quick-clock" id="quickClock">0:00:00</div>
+          <button class="quick-play" id="quickTimerBtn" type="button" title="Запустить таймер">▶</button>
+        </div>
       </div>
     </div>
 
@@ -636,7 +699,7 @@
       <div class="card">
         <div class="card-label">Целевая ставка</div>
         <div class="card-value" id="summaryTargetRate">$15/час</div>
-        <div class="card-sub">Можно переключать: $10 / $15 / $20</div>
+        <div class="card-sub">Ставка зафиксирована</div>
       </div>
       <div class="card">
         <div class="card-label">Проекты</div>
@@ -688,8 +751,11 @@
     <div class="layout">
       <aside class="sidebar panel section">
         <div class="box-title">
-          <h3>Настройки и проекты</h3>
+          <h3>Список проектов</h3>
+          <span class="muted" id="projectListCount">0</span>
         </div>
+        <div class="project-list" id="projectList"></div>
+
 
 
         <div class="box" style="margin-bottom: 16px;">
@@ -720,23 +786,7 @@
             <button class="btn tiny btn-danger" id="syncDisconnectBtn" type="button">Отключить</button>
           </div>
         </div>
-        <div class="box" style="margin-bottom: 16px;">
-          <form id="settingsForm">
-            <label>
-              Целевая ставка
-              <select id="targetRateSelect">
-                <option value="10">$10 / час</option>
-                <option value="15" selected>$15 / час</option>
-                <option value="20">$20 / час</option>
-              </select>
-            </label>
-            <div class="inline-note">
-              Бюджет времени и минимальная цена рассчитываются по выбранной ставке.
-            </div>
-          </form>
-        </div>
-
-        <div class="box" style="margin-bottom: 16px;">
+        <div class="box" style="margin: 16px 0;">
           <div class="box-title">
             <h3 id="projectFormTitle">Новый проект</h3>
             <button class="btn tiny" id="resetProjectFormBtn" type="button">Сбросить</button>
@@ -780,11 +830,6 @@
           </form>
         </div>
 
-        <div class="box-title">
-          <h3>Список проектов</h3>
-          <span class="muted" id="projectListCount">0</span>
-        </div>
-        <div class="project-list" id="projectList"></div>
       </aside>
 
       <main class="main panel section">
@@ -917,11 +962,8 @@
         const parsed = JSON.parse(raw);
 
         if (parsed && typeof parsed === 'object') {
-          state.settings = {
-            targetRate: [10, 15, 20].includes(Number(parsed.settings?.targetRate))
-              ? Number(parsed.settings.targetRate)
-              : 15
-          };
+          // Целевая ставка зафиксирована: $15/час (он попросил убрать переключение).
+          state.settings = { targetRate: 15 };
           state.projects = Array.isArray(parsed.projects) ? parsed.projects : [];
           state.tasks = Array.isArray(parsed.tasks) ? parsed.tasks : [];
           state.timeEntries = Array.isArray(parsed.timeEntries) ? parsed.timeEntries : [];
@@ -1039,9 +1081,11 @@
 
     function getActiveTimerInfo() {
       if (!state.activeTimer) return null;
-      const task = state.tasks.find(item => item.id === state.activeTimer.taskId);
+      const task = state.activeTimer.taskId
+        ? state.tasks.find(item => item.id === state.activeTimer.taskId)
+        : null;
       const project = state.projects.find(item => item.id === state.activeTimer.projectId);
-      if (!task || !project) return null;
+      if (!project) return null;
 
       const startedAt = new Date(state.activeTimer.startedAt).getTime();
       const now = Date.now();
@@ -1201,7 +1245,9 @@
       if (activeTimer) {
         activeTimerElement.textContent = formatDuration(activeTimer.elapsedHours);
         activeTimerElement.className = 'card-value good';
-        activeTimerSubElement.textContent = `${activeTimer.project.name} → ${activeTimer.task.name}`;
+        activeTimerSubElement.textContent = activeTimer.task
+          ? `${activeTimer.project.name} → ${activeTimer.task.name}`
+          : `${activeTimer.project.name} · без задачи`;
       } else {
         activeTimerElement.textContent = 'Нет';
         activeTimerElement.className = 'card-value';
@@ -1307,6 +1353,23 @@
       return value.charAt(0).toUpperCase() + value.slice(1);
     }
 
+    // Запущенный таймер поднимает проект и задачу наверх списка.
+    function sortProjectsForList(a, b) {
+      const aRunning = state.activeTimer && state.activeTimer.projectId === a.id ? 0 : 1;
+      const bRunning = state.activeTimer && state.activeTimer.projectId === b.id ? 0 : 1;
+      if (aRunning !== bRunning) return aRunning - bRunning;
+      const aArchived = a.status === 'archived' ? 1 : 0;
+      const bArchived = b.status === 'archived' ? 1 : 0;
+      if (aArchived !== bArchived) return aArchived - bArchived;
+      return new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime();
+    }
+
+    function sortTasksForList(a, b) {
+      const aRunning = state.activeTimer && state.activeTimer.taskId === a.id ? 0 : 1;
+      const bRunning = state.activeTimer && state.activeTimer.taskId === b.id ? 0 : 1;
+      return aRunning - bRunning;
+    }
+
     function renderProjectList() {
       const listElement = document.getElementById('projectList');
 
@@ -1315,12 +1378,7 @@
         return;
       }
 
-      const sortedProjects = [...state.projects].sort((a, b) => {
-        const aArchived = a.status === 'archived' ? 1 : 0;
-        const bArchived = b.status === 'archived' ? 1 : 0;
-        if (aArchived !== bArchived) return aArchived - bArchived;
-        return new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime();
-      });
+      const sortedProjects = [...state.projects].sort(sortProjectsForList);
 
       listElement.innerHTML = sortedProjects.map(project => {
         const metrics = calculateProjectMetrics(project);
@@ -1334,6 +1392,8 @@
               <div>
                 <div class="project-name">${escapeHtml(project.name)}</div>
                 <span class="pill ${statusClass(project.status)}">${escapeHtml(statusLabel(project.status))}</span>
+                ${state.activeTimer && state.activeTimer.projectId === project.id
+                  ? '<span class="pill status-done">● идёт</span>' : ''}
               </div>
               <div class="pill">${formatMoney(project.price || 0)}</div>
             </div>
@@ -1372,7 +1432,7 @@
       }
 
       const metrics = calculateProjectMetrics(project);
-      const tasks = getTasksByProjectId(project.id);
+      const tasks = getTasksByProjectId(project.id).sort(sortTasksForList);
       const projectEntries = getTimeEntriesByProjectId(project.id)
         .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
 
@@ -1405,6 +1465,8 @@
                 ${project.status !== 'done' && project.status !== 'archived'
                   ? '<span class="pill">Ставка предварительная: оставшаяся работа может ее снизить</span>'
                   : ''}
+                ${state.activeTimer && state.activeTimer.projectId === project.id && !state.activeTimer.taskId
+                  ? '<span class="pill status-done">● Таймер запущен по проекту (без задачи)</span>' : ''}
                 ${metrics.expensesWarning
                   ? '<span class="pill warn">Расходы выше стоимости проекта</span>'
                   : ''}
@@ -2051,14 +2113,15 @@
       if (!project) return;
 
       if (state.activeTimer) {
-        if (state.activeTimer.taskId === taskId) {
+        const sameTask = state.activeTimer.taskId === taskId && state.activeTimer.projectId === project.id;
+        if (sameTask) {
           alert('Таймер для этой задачи уже запущен.');
           return;
         }
 
-        const shouldReplace = confirm('Сейчас уже запущен другой таймер. Остановить его и запустить новый?');
+        const shouldReplace = confirm('Сейчас уже запущен другой таймер. Остановить его и записать время?');
         if (!shouldReplace) return;
-        stopTimer(state.activeTimer.taskId, true);
+        stopActiveTimer(true);
       }
 
       state.activeTimer = {
@@ -2071,11 +2134,30 @@
       renderAll();
     }
 
-    function stopTimer(taskId, silent = false) {
-      if (!state.activeTimer || state.activeTimer.taskId !== taskId) {
-        if (!silent) {
-          alert('Активный таймер для этой задачи не найден.');
-        }
+    // Таймер можно вести и без задачи — тогда запись ложится на проект целиком.
+    function startProjectTimer(projectId) {
+      const project = getProjectById(projectId);
+      if (!project) return;
+
+      if (state.activeTimer) {
+        const shouldReplace = confirm('Сейчас уже запущен таймер. Остановить его и записать время?');
+        if (!shouldReplace) return;
+        stopActiveTimer(true);
+      }
+
+      state.activeTimer = {
+        projectId: project.id,
+        taskId: null,
+        startedAt: new Date().toISOString()
+      };
+
+      saveState();
+      renderAll();
+    }
+
+    function stopActiveTimer(silent = false) {
+      if (!state.activeTimer) {
+        if (!silent) alert('Активный таймер не найден.');
         return;
       }
 
@@ -2087,8 +2169,8 @@
       state.timeEntries.push({
         id: generateId('timeEntry'),
         projectId: timer.projectId,
-        taskId: timer.taskId,
-        startedAt: new Date(startedAtMs).toISOString(),
+        taskId: timer.taskId || null,
+        startedAt: new Date(timer.startedAt).toISOString(),
         durationHours,
         comment: 'Запись создана таймером',
         createdAt: new Date().toISOString(),
@@ -2099,6 +2181,86 @@
       state.activeTimer = null;
       saveState();
       renderAll();
+    }
+
+    // Совместимость с кнопками «Остановить» внутри задач.
+    function stopTimer(taskId, silent = false) {
+      if (!state.activeTimer || (taskId && state.activeTimer.taskId !== taskId)) {
+        if (!silent) alert('Активный таймер для этой задачи не найден.');
+        return;
+      }
+      stopActiveTimer(true);
+    }
+
+    // ---- Быстрый таймер в шапке
+    function formatClock(elapsedHours) {
+      const totalSeconds = Math.max(0, Math.floor((Number(elapsedHours) || 0) * 3600));
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+      return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+
+    function renderQuickTimer() {
+      const clock = document.getElementById('quickClock');
+      const play = document.getElementById('quickTimerBtn');
+      if (!clock || !play) return;
+
+      const timer = getActiveTimerInfo();
+      if (timer) {
+        clock.textContent = formatClock(timer.elapsedHours);
+        play.textContent = '■';
+        play.className = 'quick-play running';
+        play.title = 'Остановить и записать время';
+      } else {
+        clock.textContent = '0:00:00';
+        play.textContent = '▶';
+        play.className = 'quick-play';
+        play.title = 'Запустить таймер';
+      }
+    }
+
+    function renderQuickTimerOptions() {
+      const projectSelect = document.getElementById('quickProjectSelect');
+      const taskSelect = document.getElementById('quickTaskSelect');
+      if (!projectSelect || !taskSelect) return;
+
+      const timer = state.activeTimer;
+      const wantedProject = timer
+        ? timer.projectId
+        : (projectSelect.value || state.selectedProjectId || (state.projects[0] && state.projects[0].id) || '');
+      const wantedTask = timer ? (timer.taskId || '') : taskSelect.value;
+
+      projectSelect.innerHTML = state.projects.length === 0
+        ? '<option value="">— нет проектов —</option>'
+        : [...state.projects].sort(sortProjectsForList)
+            .map(project => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.name)}</option>`)
+            .join('');
+      if (wantedProject && getProjectById(wantedProject)) projectSelect.value = wantedProject;
+
+      const projectId = projectSelect.value;
+      const tasks = projectId ? getTasksByProjectId(projectId).sort(sortTasksForList) : [];
+
+      taskSelect.innerHTML = '<option value="">Без задачи</option>' + tasks
+        .map(task => `<option value="${escapeHtml(task.id)}">${escapeHtml(task.name)}</option>`)
+        .join('');
+      if (wantedTask && tasks.some(task => task.id === wantedTask)) taskSelect.value = wantedTask;
+    }
+
+    function releaseQuickTimer() {
+      const projectId = document.getElementById('quickProjectSelect')?.value;
+      const taskId = document.getElementById('quickTaskSelect')?.value || null;
+      if (!getProjectById(projectId)) {
+        alert('Сначала выберите проект.');
+        return;
+      }
+      if (taskId) startTimer(taskId);
+      else startProjectTimer(projectId);
+    }
+
+    function toggleQuickTimer() {
+      if (getActiveTimerInfo()) stopActiveTimer();
+      else releaseQuickTimer();
     }
 
     function exportJson() {
@@ -2554,14 +2716,6 @@
         resetProjectForm();
       });
 
-      document.getElementById('targetRateSelect').addEventListener('change', (event) => {
-        const nextRate = Number(event.target.value);
-        if (![10, 15, 20].includes(nextRate)) return;
-        state.settings.targetRate = nextRate;
-        saveState();
-        renderAll();
-      });
-
       document.getElementById('exportJsonBtn').addEventListener('click', exportJson);
       document.getElementById('importJsonBtn').addEventListener('click', () => {
         document.getElementById('importJsonInput').click();
@@ -2595,6 +2749,11 @@
       });
 
       bindSyncEvents();
+
+      document.getElementById('quickTimerBtn').addEventListener('click', toggleQuickTimer);
+      document.getElementById('quickProjectSelect').addEventListener('change', () => {
+        renderQuickTimerOptions();
+      });
     }
 
     function ensureSelectedProjectExists() {
@@ -2624,11 +2783,12 @@
     function renderAll() {
       ensureSelectedProjectExists();
       ensureSelectedWeekExists();
-      document.getElementById('targetRateSelect').value = String(state.settings.targetRate);
       renderSummary();
       renderCalendarWeek();
       renderProjectList();
       renderProjectDetails();
+      renderQuickTimerOptions();
+      renderQuickTimer();
       saveState();
     }
 
@@ -2639,10 +2799,9 @@
         clearInterval(summaryTimerInterval);
       }
       summaryTimerInterval = setInterval(() => {
+        renderQuickTimer();
         if (state.activeTimer) {
           renderSummary();
-          renderCalendarWeek();
-          renderProjectDetails();
         }
       }, 1000);
     }
