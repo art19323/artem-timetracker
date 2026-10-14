@@ -73,7 +73,7 @@
 
     .summary-grid {
       display: grid;
-      grid-template-columns: repeat(8, 1fr);
+      grid-template-columns: repeat(7, 1fr);
       gap: 12px;
       margin-bottom: 16px;
     }
@@ -644,11 +644,6 @@
         <div class="card-sub" id="summaryProjectsSub">Активных: 0</div>
       </div>
       <div class="card">
-        <div class="card-label">Всего часов</div>
-        <div class="card-value" id="summaryTotalHours">0.00</div>
-        <div class="card-sub">По всем записям времени</div>
-      </div>
-      <div class="card">
         <div class="card-label">Доход после расходов</div>
         <div class="card-value" id="summaryNetIncome">$0.00</div>
         <div class="card-sub" id="summaryNetIncomeSub">Только завершённые проекты</div>
@@ -848,6 +843,19 @@
     function formatHours(value) {
       const number = Number(value) || 0;
       return number.toFixed(2);
+    }
+
+    // Часы показываем с минутами: 25.21 ч → «25 ч 13 мин».
+    function formatDuration(value) {
+      if (value === null || value === undefined || value === '') return '—';
+      const number = Number(value);
+      if (Number.isNaN(number)) return '—';
+      const totalMinutes = Math.round(Math.abs(number) * 60);
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      const sign = number < 0 ? '−' : '';
+      if (hours === 0) return `${sign}${minutes} мин`;
+      return `${sign}${hours} ч ${minutes} мин`;
     }
 
     function formatDateTimeLocal(dateString) {
@@ -1172,7 +1180,6 @@
       document.getElementById('summaryTargetRate').textContent = `$${state.settings.targetRate}/час`;
       document.getElementById('summaryProjectsCount').textContent = String(state.projects.length);
       document.getElementById('summaryProjectsSub').textContent = `Активных: ${metrics.activeProjects}`;
-      document.getElementById('summaryTotalHours').textContent = formatHours(metrics.totalHours);
       document.getElementById('summaryNetIncome').textContent = formatMoney(metrics.finishedNetIncome);
       document.getElementById('summaryNetIncomeSub').textContent =
         `Только завершённые · по всем проектам было бы ${formatMoney(metrics.totalNetIncome)}`;
@@ -1186,13 +1193,13 @@
       } else {
         effectiveRateElement.textContent = `${formatMoney(metrics.finishedRate)}/ч`;
         effectiveRateElement.className = 'card-value ' + (metrics.finishedRate >= state.settings.targetRate ? 'good' : 'bad');
-        effectiveRateSubElement.textContent = `Только завершённые: ${metrics.finishedCount} проект(а) · ${formatHours(metrics.finishedHours)} ч`;
+        effectiveRateSubElement.textContent = `Только завершённые: ${metrics.finishedCount} проект(а) · ${formatDuration(metrics.finishedHours)}`;
       }
 
       const activeTimerElement = document.getElementById('summaryActiveTimer');
       const activeTimerSubElement = document.getElementById('summaryActiveTimerSub');
       if (activeTimer) {
-        activeTimerElement.textContent = formatHours(activeTimer.elapsedHours) + ' ч';
+        activeTimerElement.textContent = formatDuration(activeTimer.elapsedHours);
         activeTimerElement.className = 'card-value good';
         activeTimerSubElement.textContent = `${activeTimer.project.name} → ${activeTimer.task.name}`;
       } else {
@@ -1215,11 +1222,11 @@
         weekAvgElement.className = 'card-value';
         weekAvgSubElement.textContent = 'Прошедших недель с данными пока нет';
       } else {
-        weekHoursElement.textContent = `${formatHours(pastWeeks.avgHoursPerWeek)} ч`;
+        weekHoursElement.textContent = formatDuration(pastWeeks.avgHoursPerWeek);
         weekHoursElement.className = 'card-value';
         weekHoursSubElement.textContent =
-          `${pastWeeks.count} прошедш. недель(и) с данными · всего ${formatHours(pastWeeks.totalHours)} ч; текущая неделя и итоговые записи не считаются`;
-        weekAvgElement.textContent = `${formatHours(pastWeeks.avgPerDay)} ч`;
+          `${pastWeeks.count} прошедш. недель(и) с данными · всего ${formatDuration(pastWeeks.totalHours)}; текущая неделя и итоговые записи не считаются`;
+        weekAvgElement.textContent = formatDuration(pastWeeks.avgPerDay);
         weekAvgElement.className = 'card-value';
         weekAvgSubElement.textContent =
           `Среднее по ${pastWeeks.count} неделям(и): часы каждой недели ÷ 5`;
@@ -1243,8 +1250,8 @@
 
       const weekMetrics = getWeekMetrics();
       summaryElement.innerHTML = `
-        <div class="calendar-week-pill">Итого за неделю: ${formatHours(weekMetrics.totalWeekHours)} ч</div>
-        <div class="calendar-week-pill">Эта неделя: ${formatHours(weekMetrics.averagePerDay)} ч в день (÷ 5)</div>
+        <div class="calendar-week-pill">Итого за неделю: ${formatDuration(weekMetrics.totalWeekHours)}</div>
+        <div class="calendar-week-pill">Эта неделя: ${formatDuration(weekMetrics.averagePerDay)} в день (÷ 5)</div>
       `;
 
       const todayKey = toDayKey(new Date());
@@ -1265,7 +1272,7 @@
                 <div class="calendar-day-title">${escapeHtml(capitalize(dayName))}</div>
                 <div class="calendar-day-date">${escapeHtml(formatShortDate(day))}</div>
               </div>
-              <div class="calendar-day-hours">${formatHours(dayHoursMap[dayKey] || 0)} ч</div>
+              <div class="calendar-day-hours">${formatDuration(dayHoursMap[dayKey] || 0)}</div>
             </div>
             <div class="calendar-entries">
               ${entries.length === 0
@@ -1287,7 +1294,7 @@
           <div class="calendar-entry-task">${escapeHtml(task ? task.name : 'Без задачи')}</div>
           <div class="calendar-entry-meta">
             <div>Начало: ${escapeHtml(formatTimeOnly(entry.startedAt))}</div>
-            <div>Длительность: ${formatHours(entry.durationHours)} ч</div>
+            <div>Длительность: ${formatDuration(entry.durationHours)}</div>
             <div>Комментарий: ${escapeHtml(entry.comment || '—')}</div>
           </div>
         </div>
@@ -1332,7 +1339,7 @@
             </div>
 
             <div class="project-meta">
-              <div>Часы: <strong>${formatHours(metrics.totalHours)}</strong></div>
+              <div>Часы: <strong>${formatDuration(metrics.totalHours)}</strong></div>
               <div>Ставка: <strong>${effectiveRateHtml}</strong></div>
               <div>Доход: <strong>${formatMoney(metrics.netIncome)}</strong></div>
               <div>Задачи: <strong>${getTasksByProjectId(project.id).length}</strong></div>
@@ -1378,13 +1385,13 @@
 
       let timeBudgetText = metrics.timeBudget === null
         ? 'Нет данных'
-        : `${formatHours(metrics.timeBudget)} ч`;
+        : `${formatDuration(metrics.timeBudget)}`;
 
       let budgetDeltaText = metrics.budgetDelta === null
         ? 'Нет данных'
         : (metrics.budgetDelta >= 0
-            ? `Запас: ${formatHours(metrics.budgetDelta)} ч`
-            : `Превышение: ${formatHours(Math.abs(metrics.budgetDelta))} ч`);
+            ? `Запас: ${formatDuration(metrics.budgetDelta)}`
+            : `Превышение: ${formatDuration(Math.abs(metrics.budgetDelta))}`);
 
       const distributionHtml = buildTaskDistributionHtml(project.id, tasks);
 
@@ -1426,7 +1433,7 @@
             </div>
             <div class="metric-box">
               <div class="label">Всего затрачено часов</div>
-              <div class="value">${formatHours(metrics.totalHours)} ч</div>
+              <div class="value">${formatDuration(metrics.totalHours)}</div>
             </div>
             <div class="metric-box">
               <div class="label">Эффективная ставка</div>
@@ -1555,7 +1562,7 @@
       const taskHours = calculateTaskHours(task.id);
       const activeTimer = state.activeTimer && state.activeTimer.taskId === task.id;
       const estimate = task.estimateHours !== null && task.estimateHours !== '' && task.estimateHours !== undefined
-        ? `${formatHours(task.estimateHours)} ч`
+        ? formatDuration(task.estimateHours)
         : '—';
 
       return `
@@ -1578,7 +1585,7 @@
           </div>
 
           <div class="task-meta">
-            <span>Затрачено: <strong>${formatHours(taskHours)} ч</strong></span>
+            <span>Затрачено: <strong>${formatDuration(taskHours)}</strong></span>
             <span>Оценка: <strong>${estimate}</strong></span>
           </div>
         </div>
@@ -1607,7 +1614,7 @@
               <div class="dist-row">
                 <div class="dist-label">
                   <span>${escapeHtml(row.task.name)}</span>
-                  <span>${formatHours(row.hours)} ч · ${percentage.toFixed(1)}%</span>
+                  <span>${formatDuration(row.hours)} · ${percentage.toFixed(1)}%</span>
                 </div>
                 <div class="bar">
                   <div class="bar-fill" style="width:${percentage}%"></div>
@@ -1626,7 +1633,7 @@
         <div class="log-item">
           <div class="log-top">
             <div>
-              <div class="task-title">${formatHours(entry.durationHours)} ч</div>
+              <div class="task-title">${formatDuration(entry.durationHours)}</div>
               <div class="log-meta">
                 <span>Дата: <strong>${escapeHtml(formatDateTimeLocal(entry.startedAt))}</strong></span>
                 <span>Задача: <strong>${escapeHtml(task ? task.name : 'Без привязки')}</strong></span>
