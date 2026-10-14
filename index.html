@@ -896,6 +896,7 @@
       const number = Number(value);
       if (Number.isNaN(number)) return '—';
       const totalMinutes = Math.round(Math.abs(number) * 60);
+      if (number !== 0 && totalMinutes === 0) return 'меньше минуты';
       const hours = Math.floor(totalMinutes / 60);
       const minutes = totalMinutes % 60;
       const sign = number < 0 ? '−' : '';
