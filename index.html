@@ -1,0 +1,2226 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Трекер времени и доходности проектов</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --panel-2: #1f2937;
+      --panel-3: #0b1220;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --line: #334155;
+      --accent: #38bdf8;
+      --accent-2: #0ea5e9;
+      --success: #22c55e;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --shadow: 0 12px 30px rgba(0,0,0,0.28);
+      --radius: 16px;
+      --radius-sm: 10px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, Arial, sans-serif;
+      background: linear-gradient(180deg, #020617, #0f172a 30%, #111827);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    .container {
+      width: min(1400px, calc(100% - 24px));
+      margin: 20px auto 40px;
+    }
+
+    h1, h2, h3, h4, p { margin-top: 0; }
+    small, .muted { color: var(--muted); }
+
+    .topbar {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .title-block h1 {
+      margin-bottom: 6px;
+      font-size: clamp(24px, 3vw, 34px);
+    }
+
+    .title-block p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .panel {
+      background: rgba(17, 24, 39, 0.92);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .section {
+      padding: 16px;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .card {
+      background: linear-gradient(180deg, rgba(31,41,55,0.9), rgba(15,23,42,0.95));
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 16px;
+      min-height: 110px;
+    }
+
+    .card-label {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 10px;
+    }
+
+    .card-value {
+      font-size: 24px;
+      font-weight: 700;
+      line-height: 1.2;
+      word-break: break-word;
+    }
+
+    .card-sub {
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .btn, button {
+      border: none;
+      cursor: pointer;
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-weight: 600;
+      transition: 0.2s ease;
+      background: #1e293b;
+      color: var(--text);
+      border: 1px solid #334155;
+    }
+
+    .btn:hover, button:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.06);
+    }
+
+    .btn-primary {
+      background: linear-gradient(180deg, var(--accent), var(--accent-2));
+      color: #001018;
+      border: none;
+    }
+
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.15);
+      color: #fecaca;
+      border: 1px solid rgba(239, 68, 68, 0.35);
+    }
+
+    .btn-success {
+      background: rgba(34, 197, 94, 0.16);
+      color: #bbf7d0;
+      border: 1px solid rgba(34, 197, 94, 0.35);
+    }
+
+    .btn-warning {
+      background: rgba(245, 158, 11, 0.18);
+      color: #fde68a;
+      border: 1px solid rgba(245, 158, 11, 0.35);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .sidebar,
+    .main {
+      min-width: 0;
+    }
+
+    .project-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 70vh;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .project-item {
+      padding: 14px;
+      background: #0b1220;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      cursor: pointer;
+      transition: 0.2s ease;
+    }
+
+    .project-item:hover {
+      border-color: #4b5563;
+      transform: translateY(-1px);
+    }
+
+    .project-item.active {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.35) inset;
+    }
+
+    .project-header-row,
+    .row-between {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .project-name {
+      font-weight: 700;
+      font-size: 16px;
+      margin-bottom: 6px;
+      word-break: break-word;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      background: rgba(15,23,42,0.85);
+      white-space: nowrap;
+    }
+
+    .status-active { color: #bfdbfe; border-color: rgba(59,130,246,0.35); }
+    .status-paused { color: #fde68a; border-color: rgba(245,158,11,0.35); }
+    .status-done { color: #bbf7d0; border-color: rgba(34,197,94,0.35); }
+    .status-archived { color: #cbd5e1; border-color: rgba(148,163,184,0.35); }
+
+    .good { color: var(--success); }
+    .bad { color: var(--danger); }
+    .warn { color: var(--warning); }
+
+    .project-meta {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 10px;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .metric-box {
+      background: #0b1220;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+    }
+
+    .metric-box .label {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .metric-box .value {
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .grid-two {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .box-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    .box-title h3 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .box {
+      background: #0b1220;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px;
+    }
+
+    form {
+      display: grid;
+      gap: 12px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .form-grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      font-size: 14px;
+      color: #dbeafe;
+    }
+
+    input, textarea, select {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid #334155;
+      background: #111827;
+      color: var(--text);
+      padding: 10px 12px;
+      font: inherit;
+    }
+
+    textarea {
+      min-height: 92px;
+      resize: vertical;
+    }
+
+    .tasks-list, .logs-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .task-item, .log-item, .calendar-entry {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(17, 24, 39, 0.8);
+    }
+
+    .task-top,
+    .log-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+
+    .task-title {
+      font-weight: 700;
+      font-size: 15px;
+      margin-bottom: 6px;
+    }
+
+    .task-actions,
+    .log-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .tiny {
+      padding: 7px 10px;
+      font-size: 12px;
+      border-radius: 10px;
+    }
+
+    .task-meta,
+    .log-meta {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .distribution {
+      display: grid;
+      gap: 12px;
+    }
+
+    .dist-row {
+      display: grid;
+      gap: 6px;
+    }
+
+    .dist-label {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 13px;
+      color: #dbeafe;
+    }
+
+    .bar {
+      width: 100%;
+      height: 10px;
+      background: #1f2937;
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid #334155;
+    }
+
+    .bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #22c55e, #38bdf8);
+      width: 0%;
+    }
+
+    .empty {
+      padding: 18px;
+      text-align: center;
+      border: 1px dashed var(--line);
+      border-radius: 14px;
+      color: var(--muted);
+      background: rgba(15,23,42,0.55);
+    }
+
+    .inline-note {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: -2px;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .active-timer-badge {
+      margin-top: 8px;
+      display: inline-flex;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(34, 197, 94, 0.14);
+      border: 1px solid rgba(34, 197, 94, 0.35);
+      color: #bbf7d0;
+      font-size: 12px;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .footer-note {
+      margin-top: 16px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .calendar-nav {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .calendar-period {
+      color: #dbeafe;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 12px;
+    }
+
+    .calendar-day {
+      background: rgba(17, 24, 39, 0.78);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      min-height: 220px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .calendar-day.today {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25) inset;
+    }
+
+    .calendar-day-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: flex-start;
+      border-bottom: 1px solid rgba(51,65,85,0.75);
+      padding-bottom: 10px;
+    }
+
+    .calendar-day-title {
+      font-weight: 700;
+      font-size: 15px;
+      margin-bottom: 4px;
+    }
+
+    .calendar-day-date {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .calendar-day-hours {
+      text-align: right;
+      font-size: 14px;
+      font-weight: 700;
+      color: #dbeafe;
+      white-space: nowrap;
+    }
+
+    .calendar-entries {
+      display: grid;
+      gap: 8px;
+    }
+
+    .calendar-entry {
+      padding: 10px;
+      border-radius: 12px;
+      background: rgba(30, 41, 59, 0.72);
+    }
+
+    .calendar-entry-project {
+      font-weight: 700;
+      font-size: 13px;
+      margin-bottom: 4px;
+      color: #f8fafc;
+    }
+
+    .calendar-entry-task {
+      color: #cbd5e1;
+      font-size: 12px;
+      margin-bottom: 6px;
+    }
+
+    .calendar-entry-meta {
+      font-size: 12px;
+      color: var(--muted);
+      display: grid;
+      gap: 3px;
+    }
+
+    .calendar-week-summary {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .calendar-week-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(15,23,42,0.9);
+      border: 1px solid var(--line);
+      color: #dbeafe;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    @media (max-width: 1280px) {
+      .summary-grid {
+        grid-template-columns: repeat(4, 1fr);
+      }
+    }
+
+    @media (max-width: 1120px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      .grid-two {
+        grid-template-columns: 1fr;
+      }
+      .calendar-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 760px) {
+      .summary-grid,
+      .detail-grid,
+      .form-grid,
+      .form-grid-3,
+      .calendar-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .container {
+        width: min(100% - 16px, 1400px);
+        margin-top: 12px;
+      }
+
+      .section {
+        padding: 14px;
+      }
+
+      .card-value {
+        font-size: 22px;
+      }
+
+      .project-meta {
+        grid-template-columns: 1fr;
+      }
+
+      .calendar-day {
+        min-height: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="topbar">
+      <div class="title-block">
+        <h1>Трекер времени и доходности проектов</h1>
+        <p>Учет времени, задач и реальной доходности проектов в USD</p>
+      </div>
+      <div class="controls">
+        <button class="btn" id="exportJsonBtn">Экспорт JSON</button>
+        <button class="btn" id="importJsonBtn">Импорт JSON</button>
+        <button class="btn" id="exportCsvBtn">Экспорт CSV</button>
+        <input type="file" id="importJsonInput" accept=".json,application/json" class="hidden" />
+      </div>
+    </div>
+
+    <div class="summary-grid" id="summaryGrid">
+      <div class="card">
+        <div class="card-label">Целевая ставка</div>
+        <div class="card-value" id="summaryTargetRate">$15/час</div>
+        <div class="card-sub">Можно переключать: $10 / $15 / $20</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Проекты</div>
+        <div class="card-value" id="summaryProjectsCount">0</div>
+        <div class="card-sub" id="summaryProjectsSub">Активных: 0</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Всего часов</div>
+        <div class="card-value" id="summaryTotalHours">0.00</div>
+        <div class="card-sub">По всем записям времени</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Доход после расходов</div>
+        <div class="card-value" id="summaryNetIncome">$0.00</div>
+        <div class="card-sub">Сумма стоимости проектов минус расходы</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Средняя эффективная ставка</div>
+        <div class="card-value" id="summaryEffectiveRate">Нет данных</div>
+        <div class="card-sub">По всем проектам с учетом часов</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Активный таймер</div>
+        <div class="card-value" id="summaryActiveTimer">Нет</div>
+        <div class="card-sub" id="summaryActiveTimerSub">Сейчас ничего не отслеживается</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Часы за выбранную неделю</div>
+        <div class="card-value" id="summaryWeekHours">0.00</div>
+        <div class="card-sub">Сумма по всем проектам</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Среднее за день</div>
+        <div class="card-value" id="summaryWeekAvg">0.00</div>
+        <div class="card-sub">За 7 дней выбранной недели</div>
+      </div>
+    </div>
+
+    <div class="panel section" style="margin-bottom: 16px;">
+      <div class="box-title">
+        <h3>Календарь недели</h3>
+        <div class="calendar-nav">
+          <button class="btn tiny" id="prevWeekBtn" type="button">← Предыдущая неделя</button>
+          <button class="btn tiny" id="currentWeekBtn" type="button">Текущая неделя</button>
+          <button class="btn tiny" id="nextWeekBtn" type="button">Следующая неделя →</button>
+          <span class="calendar-period" id="calendarPeriodLabel">—</span>
+        </div>
+      </div>
+
+      <div class="calendar-week-summary" id="calendarWeekSummary"></div>
+      <div class="calendar-grid" id="calendarGrid"></div>
+    </div>
+
+    <div class="layout">
+      <aside class="sidebar panel section">
+        <div class="box-title">
+          <h3>Настройки и проекты</h3>
+        </div>
+
+        <div class="box" style="margin-bottom: 16px;">
+          <form id="settingsForm">
+            <label>
+              Целевая ставка
+              <select id="targetRateSelect">
+                <option value="10">$10 / час</option>
+                <option value="15" selected>$15 / час</option>
+                <option value="20">$20 / час</option>
+              </select>
+            </label>
+            <div class="inline-note">
+              Бюджет времени и минимальная цена рассчитываются по выбранной ставке.
+            </div>
+          </form>
+        </div>
+
+        <div class="box" style="margin-bottom: 16px;">
+          <div class="box-title">
+            <h3 id="projectFormTitle">Новый проект</h3>
+            <button class="btn tiny" id="resetProjectFormBtn" type="button">Сбросить</button>
+          </div>
+          <form id="projectForm">
+            <input type="hidden" id="projectId" />
+            <label>
+              Название проекта
+              <input id="projectName" type="text" required maxlength="120" />
+            </label>
+
+            <div class="form-grid">
+              <label>
+                Стоимость проекта, USD
+                <input id="projectPrice" type="number" min="0" step="0.01" value="0" required />
+              </label>
+              <label>
+                Прямые расходы, USD
+                <input id="projectExpenses" type="number" min="0" step="0.01" value="0" required />
+              </label>
+            </div>
+
+            <label>
+              Статус
+              <select id="projectStatus">
+                <option value="active">Активный</option>
+                <option value="paused">Пауза</option>
+                <option value="done">Завершен</option>
+                <option value="archived">Архив</option>
+              </select>
+            </label>
+
+            <label>
+              Описание
+              <textarea id="projectDescription" placeholder="Краткое описание проекта"></textarea>
+            </label>
+
+            <div class="controls">
+              <button class="btn btn-primary" type="submit" id="saveProjectBtn">Сохранить проект</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="box-title">
+          <h3>Список проектов</h3>
+          <span class="muted" id="projectListCount">0</span>
+        </div>
+        <div class="project-list" id="projectList"></div>
+      </aside>
+
+      <main class="main panel section">
+        <div id="projectDetailsContainer">
+          <div class="empty">
+            Выберите проект слева или создайте новый, чтобы увидеть задачи, расчеты и журнал времени.
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'freelanceProjectTracker_v2_calendar';
+
+    const state = {
+      settings: {
+        targetRate: 15
+      },
+      projects: [],
+      tasks: [],
+      timeEntries: [],
+      activeTimer: null,
+      selectedProjectId: null,
+      editingTaskId: null,
+      editingTimeEntryId: null,
+      selectedWeekStart: null
+    };
+
+    function generateId(prefix) {
+      return prefix + '_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+    }
+
+    function deepClone(data) {
+      return JSON.parse(JSON.stringify(data));
+    }
+
+    function safeText(value) {
+      return String(value ?? '');
+    }
+
+    function escapeHtml(value) {
+      return safeText(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function formatMoney(value) {
+      const number = Number(value) || 0;
+      return '$' + number.toFixed(2);
+    }
+
+    function formatHours(value) {
+      const number = Number(value) || 0;
+      return number.toFixed(2);
+    }
+
+    function formatDateTimeLocal(dateString) {
+      if (!dateString) return '—';
+      const date = new Date(dateString);
+      if (Number.isNaN(date.getTime())) return '—';
+      return date.toLocaleString('ru-RU');
+    }
+
+    function formatDateInputValue(dateString) {
+      const date = dateString ? new Date(dateString) : new Date();
+      if (Number.isNaN(date.getTime())) return '';
+      const pad = (n) => String(n).padStart(2, '0');
+      const year = date.getFullYear();
+      const month = pad(date.getMonth() + 1);
+      const day = pad(date.getDate());
+      const hours = pad(date.getHours());
+      const minutes = pad(date.getMinutes());
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    }
+
+    function formatTimeOnly(dateString) {
+      const date = new Date(dateString);
+      if (Number.isNaN(date.getTime())) return '—';
+      return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function formatShortDate(date) {
+      return date.toLocaleDateString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit'
+      });
+    }
+
+    function statusLabel(status) {
+      const map = {
+        active: 'Активный',
+        paused: 'Пауза',
+        done: 'Завершен',
+        archived: 'Архив'
+      };
+      return map[status] || status;
+    }
+
+    function statusClass(status) {
+      const map = {
+        active: 'status-active',
+        paused: 'status-paused',
+        done: 'status-done',
+        archived: 'status-archived'
+      };
+      return map[status] || '';
+    }
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+
+        if (parsed && typeof parsed === 'object') {
+          state.settings = {
+            targetRate: [10, 15, 20].includes(Number(parsed.settings?.targetRate))
+              ? Number(parsed.settings.targetRate)
+              : 15
+          };
+          state.projects = Array.isArray(parsed.projects) ? parsed.projects : [];
+          state.tasks = Array.isArray(parsed.tasks) ? parsed.tasks : [];
+          state.timeEntries = Array.isArray(parsed.timeEntries) ? parsed.timeEntries : [];
+          state.activeTimer = parsed.activeTimer && typeof parsed.activeTimer === 'object'
+            ? parsed.activeTimer
+            : null;
+          state.selectedProjectId = parsed.selectedProjectId || (state.projects[0]?.id ?? null);
+          state.selectedWeekStart = parsed.selectedWeekStart || null;
+        }
+      } catch (error) {
+        console.error('Ошибка загрузки состояния:', error);
+      }
+    }
+
+    function saveState() {
+      const payload = {
+        settings: state.settings,
+        projects: state.projects,
+        tasks: state.tasks,
+        timeEntries: state.timeEntries,
+        activeTimer: state.activeTimer,
+        selectedProjectId: state.selectedProjectId,
+        selectedWeekStart: state.selectedWeekStart
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    }
+
+    function getProjectById(projectId) {
+      return state.projects.find(project => project.id === projectId) || null;
+    }
+
+    function getTasksByProjectId(projectId) {
+      return state.tasks.filter(task => task.projectId === projectId);
+    }
+
+    function getTimeEntriesByProjectId(projectId) {
+      return state.timeEntries.filter(entry => entry.projectId === projectId);
+    }
+
+    function getTimeEntriesByTaskId(taskId) {
+      return state.timeEntries.filter(entry => entry.taskId === taskId);
+    }
+
+    function calculateEntryHours(entry) {
+      return Number(entry.durationHours) || 0;
+    }
+
+    function calculateProjectHours(projectId) {
+      return getTimeEntriesByProjectId(projectId)
+        .reduce((sum, entry) => sum + calculateEntryHours(entry), 0);
+    }
+
+    function calculateTaskHours(taskId) {
+      return getTimeEntriesByTaskId(taskId)
+        .reduce((sum, entry) => sum + calculateEntryHours(entry), 0);
+    }
+
+    function calculateProjectMetrics(project) {
+      const totalHours = calculateProjectHours(project.id);
+      const price = Number(project.price) || 0;
+      const expenses = Number(project.expenses) || 0;
+      const netIncome = price - expenses;
+      const hasHours = totalHours > 0;
+      const effectiveRate = hasHours ? (netIncome / totalHours) : null;
+      const timeBudget = state.settings.targetRate > 0 ? (netIncome / state.settings.targetRate) : null;
+      const budgetDelta = timeBudget === null ? null : (timeBudget - totalHours);
+      const minimumRecommendedPrice = totalHours * state.settings.targetRate + expenses;
+
+      return {
+        totalHours,
+        price,
+        expenses,
+        netIncome,
+        effectiveRate,
+        timeBudget,
+        budgetDelta,
+        minimumRecommendedPrice,
+        expensesWarning: expenses > price
+      };
+    }
+
+    function getOverallMetrics() {
+      const totalHours = state.timeEntries.reduce((sum, entry) => sum + calculateEntryHours(entry), 0);
+      const totalNetIncome = state.projects.reduce((sum, project) => {
+        return sum + ((Number(project.price) || 0) - (Number(project.expenses) || 0));
+      }, 0);
+      const effectiveRate = totalHours > 0 ? (totalNetIncome / totalHours) : null;
+      const activeProjects = state.projects.filter(project => project.status === 'active').length;
+
+      return {
+        totalHours,
+        totalNetIncome,
+        effectiveRate,
+        activeProjects
+      };
+    }
+
+    function getActiveTimerInfo() {
+      if (!state.activeTimer) return null;
+      const task = state.tasks.find(item => item.id === state.activeTimer.taskId);
+      const project = state.projects.find(item => item.id === state.activeTimer.projectId);
+      if (!task || !project) return null;
+
+      const startedAt = new Date(state.activeTimer.startedAt).getTime();
+      const now = Date.now();
+      const elapsedHours = Math.max(0, (now - startedAt) / 3600000);
+
+      return {
+        task,
+        project,
+        elapsedHours
+      };
+    }
+
+    function getStartOfWeek(date) {
+      const d = new Date(date);
+      d.setHours(0, 0, 0, 0);
+      const day = d.getDay();
+      const diff = day === 0 ? -6 : 1 - day;
+      d.setDate(d.getDate() + diff);
+      return d;
+    }
+
+    function addDays(date, days) {
+      const d = new Date(date);
+      d.setDate(d.getDate() + days);
+      return d;
+    }
+
+    function toDayKey(date) {
+      const d = new Date(date);
+      d.setHours(0, 0, 0, 0);
+      return d.toISOString().slice(0, 10);
+    }
+
+    function getSelectedWeekStart() {
+      if (state.selectedWeekStart) {
+        const parsed = new Date(state.selectedWeekStart);
+        if (!Number.isNaN(parsed.getTime())) {
+          return getStartOfWeek(parsed);
+        }
+      }
+      const currentWeek = getStartOfWeek(new Date());
+      state.selectedWeekStart = currentWeek.toISOString();
+      return currentWeek;
+    }
+
+    function getWeekDays() {
+      const start = getSelectedWeekStart();
+      return Array.from({ length: 7 }, (_, index) => addDays(start, index));
+    }
+
+    function getWeekEntries() {
+      const weekDays = getWeekDays();
+      const start = new Date(weekDays[0]);
+      const end = addDays(start, 7);
+
+      return state.timeEntries.filter(entry => {
+        const entryDate = new Date(entry.startedAt);
+        return entryDate >= start && entryDate < end;
+      });
+    }
+
+    function getDayHoursMapForWeek() {
+      const map = {};
+      getWeekDays().forEach(day => {
+        map[toDayKey(day)] = 0;
+      });
+
+      getWeekEntries().forEach(entry => {
+        const key = toDayKey(entry.startedAt);
+        if (Object.prototype.hasOwnProperty.call(map, key)) {
+          map[key] += calculateEntryHours(entry);
+        }
+      });
+
+      return map;
+    }
+
+    function getWeekMetrics() {
+      const entries = getWeekEntries();
+      const totalWeekHours = entries.reduce((sum, entry) => sum + calculateEntryHours(entry), 0);
+      const averagePerDay = totalWeekHours / 7;
+      return {
+        totalWeekHours,
+        averagePerDay
+      };
+    }
+
+    function renderSummary() {
+      const metrics = getOverallMetrics();
+      const activeTimer = getActiveTimerInfo();
+      const weekMetrics = getWeekMetrics();
+
+      document.getElementById('summaryTargetRate').textContent = `$${state.settings.targetRate}/час`;
+      document.getElementById('summaryProjectsCount').textContent = String(state.projects.length);
+      document.getElementById('summaryProjectsSub').textContent = `Активных: ${metrics.activeProjects}`;
+      document.getElementById('summaryTotalHours').textContent = formatHours(metrics.totalHours);
+      document.getElementById('summaryNetIncome').textContent = formatMoney(metrics.totalNetIncome);
+
+      const effectiveRateElement = document.getElementById('summaryEffectiveRate');
+      if (metrics.effectiveRate === null) {
+        effectiveRateElement.textContent = 'Нет данных';
+        effectiveRateElement.className = 'card-value';
+      } else {
+        effectiveRateElement.textContent = `${formatMoney(metrics.effectiveRate)}/ч`;
+        effectiveRateElement.className = 'card-value ' + (metrics.effectiveRate >= state.settings.targetRate ? 'good' : 'bad');
+      }
+
+      const activeTimerElement = document.getElementById('summaryActiveTimer');
+      const activeTimerSubElement = document.getElementById('summaryActiveTimerSub');
+      if (activeTimer) {
+        activeTimerElement.textContent = formatHours(activeTimer.elapsedHours) + ' ч';
+        activeTimerElement.className = 'card-value good';
+        activeTimerSubElement.textContent = `${activeTimer.project.name} → ${activeTimer.task.name}`;
+      } else {
+        activeTimerElement.textContent = 'Нет';
+        activeTimerElement.className = 'card-value';
+        activeTimerSubElement.textContent = 'Сейчас ничего не отслеживается';
+      }
+
+      document.getElementById('summaryWeekHours').textContent = `${formatHours(weekMetrics.totalWeekHours)} ч`;
+      document.getElementById('summaryWeekAvg').textContent = `${formatHours(weekMetrics.averagePerDay)} ч`;
+      document.getElementById('projectListCount').textContent = String(state.projects.length);
+    }
+
+    function renderCalendarWeek() {
+      const gridElement = document.getElementById('calendarGrid');
+      const summaryElement = document.getElementById('calendarWeekSummary');
+      const periodLabel = document.getElementById('calendarPeriodLabel');
+
+      const weekDays = getWeekDays();
+      const dayHoursMap = getDayHoursMapForWeek();
+      const weekEntries = getWeekEntries();
+
+      const firstDay = weekDays[0];
+      const lastDay = weekDays[6];
+
+      periodLabel.textContent = `${firstDay.toLocaleDateString('ru-RU')} — ${lastDay.toLocaleDateString('ru-RU')}`;
+
+      const weekMetrics = getWeekMetrics();
+      summaryElement.innerHTML = `
+        <div class="calendar-week-pill">Итого за неделю: ${formatHours(weekMetrics.totalWeekHours)} ч</div>
+        <div class="calendar-week-pill">Среднее за день: ${formatHours(weekMetrics.averagePerDay)} ч</div>
+      `;
+
+      const todayKey = toDayKey(new Date());
+
+      gridElement.innerHTML = weekDays.map(day => {
+        const dayKey = toDayKey(day);
+        const entries = weekEntries
+          .filter(entry => toDayKey(entry.startedAt) === dayKey)
+          .sort((a, b) => new Date(a.startedAt) - new Date(b.startedAt));
+
+        const dayName = day.toLocaleDateString('ru-RU', { weekday: 'short' });
+        const isToday = dayKey === todayKey;
+
+        return `
+          <div class="calendar-day ${isToday ? 'today' : ''}">
+            <div class="calendar-day-header">
+              <div>
+                <div class="calendar-day-title">${escapeHtml(capitalize(dayName))}</div>
+                <div class="calendar-day-date">${escapeHtml(formatShortDate(day))}</div>
+              </div>
+              <div class="calendar-day-hours">${formatHours(dayHoursMap[dayKey] || 0)} ч</div>
+            </div>
+            <div class="calendar-entries">
+              ${entries.length === 0
+                ? '<div class="inline-note">0.00 ч · записей нет</div>'
+                : entries.map(entry => buildCalendarEntryHtml(entry)).join('')}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function buildCalendarEntryHtml(entry) {
+      const project = getProjectById(entry.projectId);
+      const task = entry.taskId ? state.tasks.find(item => item.id === entry.taskId) : null;
+
+      return `
+        <div class="calendar-entry">
+          <div class="calendar-entry-project">${escapeHtml(project?.name || 'Без проекта')}</div>
+          <div class="calendar-entry-task">${escapeHtml(task ? task.name : 'Без задачи')}</div>
+          <div class="calendar-entry-meta">
+            <div>Начало: ${escapeHtml(formatTimeOnly(entry.startedAt))}</div>
+            <div>Длительность: ${formatHours(entry.durationHours)} ч</div>
+            <div>Комментарий: ${escapeHtml(entry.comment || '—')}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function capitalize(text) {
+      const value = safeText(text);
+      if (!value) return '';
+      return value.charAt(0).toUpperCase() + value.slice(1);
+    }
+
+    function renderProjectList() {
+      const listElement = document.getElementById('projectList');
+
+      if (state.projects.length === 0) {
+        listElement.innerHTML = '<div class="empty">Пока нет ни одного проекта.</div>';
+        return;
+      }
+
+      const sortedProjects = [...state.projects].sort((a, b) => {
+        const aArchived = a.status === 'archived' ? 1 : 0;
+        const bArchived = b.status === 'archived' ? 1 : 0;
+        if (aArchived !== bArchived) return aArchived - bArchived;
+        return new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime();
+      });
+
+      listElement.innerHTML = sortedProjects.map(project => {
+        const metrics = calculateProjectMetrics(project);
+        const effectiveRateHtml = metrics.effectiveRate === null
+          ? 'Нет данных'
+          : `<span class="${metrics.effectiveRate >= state.settings.targetRate ? 'good' : 'bad'}">${formatMoney(metrics.effectiveRate)}/ч</span>`;
+
+        return `
+          <div class="project-item ${state.selectedProjectId === project.id ? 'active' : ''}" data-project-id="${escapeHtml(project.id)}">
+            <div class="project-header-row">
+              <div>
+                <div class="project-name">${escapeHtml(project.name)}</div>
+                <span class="pill ${statusClass(project.status)}">${escapeHtml(statusLabel(project.status))}</span>
+              </div>
+              <div class="pill">${formatMoney(project.price || 0)}</div>
+            </div>
+
+            <div class="project-meta">
+              <div>Часы: <strong>${formatHours(metrics.totalHours)}</strong></div>
+              <div>Ставка: <strong>${effectiveRateHtml}</strong></div>
+              <div>Доход: <strong>${formatMoney(metrics.netIncome)}</strong></div>
+              <div>Задачи: <strong>${getTasksByProjectId(project.id).length}</strong></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      listElement.querySelectorAll('.project-item').forEach(item => {
+        item.addEventListener('click', () => {
+          state.selectedProjectId = item.dataset.projectId;
+          saveState();
+          renderAll();
+          fillProjectFormForEdit(state.selectedProjectId);
+        });
+      });
+    }
+
+    function renderProjectDetails() {
+      const container = document.getElementById('projectDetailsContainer');
+      const project = getProjectById(state.selectedProjectId);
+
+      if (!project) {
+        container.innerHTML = `
+          <div class="empty">
+            Выберите проект слева или создайте новый, чтобы увидеть задачи, расчеты и журнал времени.
+          </div>
+        `;
+        return;
+      }
+
+      const metrics = calculateProjectMetrics(project);
+      const tasks = getTasksByProjectId(project.id);
+      const projectEntries = getTimeEntriesByProjectId(project.id)
+        .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+
+      let effectiveRateText = 'Нет данных';
+      let effectiveRateClass = '';
+      if (metrics.effectiveRate !== null) {
+        effectiveRateText = `${formatMoney(metrics.effectiveRate)}/ч`;
+        effectiveRateClass = metrics.effectiveRate >= state.settings.targetRate ? 'good' : 'bad';
+      }
+
+      let timeBudgetText = metrics.timeBudget === null
+        ? 'Нет данных'
+        : `${formatHours(metrics.timeBudget)} ч`;
+
+      let budgetDeltaText = metrics.budgetDelta === null
+        ? 'Нет данных'
+        : (metrics.budgetDelta >= 0
+            ? `Запас: ${formatHours(metrics.budgetDelta)} ч`
+            : `Превышение: ${formatHours(Math.abs(metrics.budgetDelta))} ч`);
+
+      const distributionHtml = buildTaskDistributionHtml(project.id, tasks);
+
+      container.innerHTML = `
+        <div class="box" style="margin-bottom: 16px;">
+          <div class="box-title">
+            <div>
+              <h2 style="margin: 0 0 8px 0;">${escapeHtml(project.name)}</h2>
+              <div class="row-between" style="flex-wrap: wrap;">
+                <span class="pill ${statusClass(project.status)}">${escapeHtml(statusLabel(project.status))}</span>
+                ${project.status !== 'done' && project.status !== 'archived'
+                  ? '<span class="pill">Ставка предварительная: оставшаяся работа может ее снизить</span>'
+                  : ''}
+                ${metrics.expensesWarning
+                  ? '<span class="pill warn">Расходы выше стоимости проекта</span>'
+                  : ''}
+              </div>
+            </div>
+            <div class="task-actions">
+              <button class="btn tiny" id="archiveProjectBtn" type="button">${project.status === 'archived' ? 'Разархивировать' : 'Архивировать'}</button>
+              <button class="btn tiny btn-danger" id="deleteProjectBtn" type="button">Удалить проект</button>
+            </div>
+          </div>
+
+          <p class="muted">${escapeHtml(project.description || 'Описание не указано')}</p>
+
+          <div class="detail-grid">
+            <div class="metric-box">
+              <div class="label">Стоимость проекта</div>
+              <div class="value">${formatMoney(metrics.price)}</div>
+            </div>
+            <div class="metric-box">
+              <div class="label">Прямые расходы</div>
+              <div class="value">${formatMoney(metrics.expenses)}</div>
+            </div>
+            <div class="metric-box">
+              <div class="label">Доход после расходов</div>
+              <div class="value ${metrics.netIncome < 0 ? 'bad' : ''}">${formatMoney(metrics.netIncome)}</div>
+            </div>
+            <div class="metric-box">
+              <div class="label">Всего затрачено часов</div>
+              <div class="value">${formatHours(metrics.totalHours)} ч</div>
+            </div>
+            <div class="metric-box">
+              <div class="label">Эффективная ставка</div>
+              <div class="value ${effectiveRateClass}">${effectiveRateText}</div>
+            </div>
+            <div class="metric-box">
+              <div class="label">Бюджет времени по ставке $${state.settings.targetRate}</div>
+              <div class="value">${timeBudgetText}</div>
+            </div>
+            <div class="metric-box">
+              <div class="label">Остаток / превышение</div>
+              <div class="value ${metrics.budgetDelta !== null && metrics.budgetDelta < 0 ? 'bad' : 'good'}">${budgetDeltaText}</div>
+            </div>
+            <div class="metric-box">
+              <div class="label">Минимальная цена по уже затраченному времени</div>
+              <div class="value">${formatMoney(metrics.minimumRecommendedPrice)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-two">
+          <div class="box">
+            <div class="box-title">
+              <h3 id="taskFormTitle">Задачи проекта</h3>
+            </div>
+
+            <form id="taskForm">
+              <input type="hidden" id="taskId" />
+              <div class="form-grid">
+                <label>
+                  Название задачи
+                  <input id="taskName" type="text" maxlength="140" required />
+                </label>
+                <label>
+                  Статус задачи
+                  <select id="taskStatus">
+                    <option value="active">Активная</option>
+                    <option value="paused">Пауза</option>
+                    <option value="done">Завершена</option>
+                  </select>
+                </label>
+              </div>
+
+              <label>
+                Оценка времени, часы (необязательно)
+                <input id="taskEstimateHours" type="number" min="0" step="0.01" placeholder="Например, 3.5" />
+              </label>
+
+              <div class="controls">
+                <button class="btn btn-primary" type="submit" id="saveTaskBtn">Сохранить задачу</button>
+                <button class="btn tiny" type="button" id="resetTaskFormBtn">Сбросить</button>
+              </div>
+            </form>
+
+            <div style="height: 16px;"></div>
+
+            <div class="tasks-list">
+              ${tasks.length === 0 ? '<div class="empty">В этом проекте пока нет задач.</div>' : tasks.map(task => buildTaskHtml(task)).join('')}
+            </div>
+          </div>
+
+          <div class="box">
+            <div class="box-title">
+              <h3>Распределение времени по задачам</h3>
+            </div>
+            ${distributionHtml}
+          </div>
+        </div>
+
+        <div class="box" style="margin-top: 16px;">
+          <div class="box-title">
+            <h3 id="timeEntryFormTitle">Журнал времени</h3>
+          </div>
+
+          <form id="timeEntryForm">
+            <input type="hidden" id="timeEntryId" />
+            <div class="form-grid-3">
+              <label>
+                Дата и время начала
+                <input id="timeEntryStartedAt" type="datetime-local" required />
+              </label>
+
+              <label>
+                Длительность, часы
+                <input id="timeEntryDurationHours" type="number" min="0" step="0.01" required />
+              </label>
+
+              <label>
+                Задача
+                <select id="timeEntryTaskId">
+                  <option value="">Без привязки к задаче</option>
+                  ${tasks.map(task => `<option value="${escapeHtml(task.id)}">${escapeHtml(task.name)}</option>`).join('')}
+                </select>
+              </label>
+            </div>
+
+            <label>
+              Комментарий
+              <textarea id="timeEntryComment" placeholder="Краткое описание выполненной работы"></textarea>
+            </label>
+
+            <div class="controls">
+              <button class="btn btn-primary" type="submit" id="saveTimeEntryBtn">Сохранить запись</button>
+              <button class="btn tiny" type="button" id="resetTimeEntryFormBtn">Сбросить</button>
+            </div>
+          </form>
+
+          <div style="height: 16px;"></div>
+
+          <div class="logs-list">
+            ${projectEntries.length === 0 ? '<div class="empty">По этому проекту пока нет записей времени.</div>' : projectEntries.map(entry => buildTimeEntryHtml(entry)).join('')}
+          </div>
+        </div>
+
+        <div class="footer-note">
+          Данные хранятся локально в вашем браузере. Для резервного копирования используйте экспорт JSON.
+        </div>
+      `;
+
+      bindProjectDetailEvents(project.id);
+      fillTaskFormForEdit(state.editingTaskId);
+      fillTimeEntryFormForEdit(state.editingTimeEntryId);
+    }
+
+    function buildTaskHtml(task) {
+      const taskHours = calculateTaskHours(task.id);
+      const activeTimer = state.activeTimer && state.activeTimer.taskId === task.id;
+      const estimate = task.estimateHours !== null && task.estimateHours !== '' && task.estimateHours !== undefined
+        ? `${formatHours(task.estimateHours)} ч`
+        : '—';
+
+      return `
+        <div class="task-item">
+          <div class="task-top">
+            <div>
+              <div class="task-title">${escapeHtml(task.name)}</div>
+              <span class="pill ${statusClass(task.status)}">${escapeHtml(statusLabel(task.status))}</span>
+              ${activeTimer ? '<div class="active-timer-badge">● Таймер запущен</div>' : ''}
+            </div>
+
+            <div class="task-actions">
+              ${activeTimer
+                ? `<button class="btn tiny btn-danger" data-action="stop-timer" data-task-id="${escapeHtml(task.id)}">Остановить</button>`
+                : `<button class="btn tiny btn-success" data-action="start-timer" data-task-id="${escapeHtml(task.id)}">Начать</button>`
+              }
+              <button class="btn tiny" data-action="edit-task" data-task-id="${escapeHtml(task.id)}">Изменить</button>
+              <button class="btn tiny btn-danger" data-action="delete-task" data-task-id="${escapeHtml(task.id)}">Удалить</button>
+            </div>
+          </div>
+
+          <div class="task-meta">
+            <span>Затрачено: <strong>${formatHours(taskHours)} ч</strong></span>
+            <span>Оценка: <strong>${estimate}</strong></span>
+          </div>
+        </div>
+      `;
+    }
+
+    function buildTaskDistributionHtml(projectId, tasks) {
+      const totalProjectHours = calculateProjectHours(projectId);
+
+      if (tasks.length === 0) {
+        return '<div class="empty">Нет задач для построения распределения времени.</div>';
+      }
+
+      const rows = tasks
+        .map(task => ({
+          task,
+          hours: calculateTaskHours(task.id)
+        }))
+        .sort((a, b) => b.hours - a.hours);
+
+      return `
+        <div class="distribution">
+          ${rows.map(row => {
+            const percentage = totalProjectHours > 0 ? (row.hours / totalProjectHours) * 100 : 0;
+            return `
+              <div class="dist-row">
+                <div class="dist-label">
+                  <span>${escapeHtml(row.task.name)}</span>
+                  <span>${formatHours(row.hours)} ч · ${percentage.toFixed(1)}%</span>
+                </div>
+                <div class="bar">
+                  <div class="bar-fill" style="width:${percentage}%"></div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+          ${totalProjectHours === 0 ? '<div class="inline-note">Пока нет записей времени, поэтому все полосы равны 0%.</div>' : ''}
+        </div>
+      `;
+    }
+
+    function buildTimeEntryHtml(entry) {
+      const task = entry.taskId ? state.tasks.find(item => item.id === entry.taskId) : null;
+      return `
+        <div class="log-item">
+          <div class="log-top">
+            <div>
+              <div class="task-title">${formatHours(entry.durationHours)} ч</div>
+              <div class="log-meta">
+                <span>Дата: <strong>${escapeHtml(formatDateTimeLocal(entry.startedAt))}</strong></span>
+                <span>Задача: <strong>${escapeHtml(task ? task.name : 'Без привязки')}</strong></span>
+              </div>
+            </div>
+
+            <div class="log-actions">
+              <button class="btn tiny" data-action="edit-time-entry" data-entry-id="${escapeHtml(entry.id)}">Изменить</button>
+              <button class="btn tiny btn-danger" data-action="delete-time-entry" data-entry-id="${escapeHtml(entry.id)}">Удалить</button>
+            </div>
+          </div>
+          <div class="task-meta">
+            <span>Комментарий: ${escapeHtml(entry.comment || '—')}</span>
+          </div>
+        </div>
+      `;
+    }
+
+    function bindProjectDetailEvents(projectId) {
+      const taskForm = document.getElementById('taskForm');
+      const timeEntryForm = document.getElementById('timeEntryForm');
+
+      document.getElementById('archiveProjectBtn')?.addEventListener('click', () => {
+        toggleProjectArchive(projectId);
+      });
+
+      document.getElementById('deleteProjectBtn')?.addEventListener('click', () => {
+        deleteProject(projectId);
+      });
+
+      document.getElementById('resetTaskFormBtn')?.addEventListener('click', () => {
+        resetTaskForm();
+      });
+
+      document.getElementById('resetTimeEntryFormBtn')?.addEventListener('click', () => {
+        resetTimeEntryForm();
+      });
+
+      taskForm?.addEventListener('submit', handleTaskSubmit);
+      timeEntryForm?.addEventListener('submit', handleTimeEntrySubmit);
+
+      document.querySelectorAll('[data-action="start-timer"]').forEach(button => {
+        button.addEventListener('click', () => startTimer(button.dataset.taskId));
+      });
+
+      document.querySelectorAll('[data-action="stop-timer"]').forEach(button => {
+        button.addEventListener('click', () => stopTimer(button.dataset.taskId));
+      });
+
+      document.querySelectorAll('[data-action="edit-task"]').forEach(button => {
+        button.addEventListener('click', () => {
+          state.editingTaskId = button.dataset.taskId;
+          fillTaskFormForEdit(state.editingTaskId);
+        });
+      });
+
+      document.querySelectorAll('[data-action="delete-task"]').forEach(button => {
+        button.addEventListener('click', () => deleteTask(button.dataset.taskId));
+      });
+
+      document.querySelectorAll('[data-action="edit-time-entry"]').forEach(button => {
+        button.addEventListener('click', () => {
+          state.editingTimeEntryId = button.dataset.entryId;
+          fillTimeEntryFormForEdit(state.editingTimeEntryId);
+        });
+      });
+
+      document.querySelectorAll('[data-action="delete-time-entry"]').forEach(button => {
+        button.addEventListener('click', () => deleteTimeEntry(button.dataset.entryId));
+      });
+    }
+
+    function resetProjectForm() {
+      document.getElementById('projectForm').reset();
+      document.getElementById('projectId').value = '';
+      document.getElementById('projectPrice').value = '0';
+      document.getElementById('projectExpenses').value = '0';
+      document.getElementById('projectStatus').value = 'active';
+      document.getElementById('projectFormTitle').textContent = 'Новый проект';
+    }
+
+    function fillProjectFormForEdit(projectId) {
+      const project = getProjectById(projectId);
+      if (!project) return;
+
+      document.getElementById('projectId').value = project.id;
+      document.getElementById('projectName').value = safeText(project.name);
+      document.getElementById('projectPrice').value = Number(project.price) || 0;
+      document.getElementById('projectExpenses').value = Number(project.expenses) || 0;
+      document.getElementById('projectStatus').value = safeText(project.status);
+      document.getElementById('projectDescription').value = safeText(project.description || '');
+      document.getElementById('projectFormTitle').textContent = 'Редактирование проекта';
+    }
+
+    function resetTaskForm() {
+      state.editingTaskId = null;
+      const form = document.getElementById('taskForm');
+      if (!form) return;
+      form.reset();
+      document.getElementById('taskId').value = '';
+      document.getElementById('taskStatus').value = 'active';
+      document.getElementById('taskFormTitle').textContent = 'Задачи проекта';
+    }
+
+    function fillTaskFormForEdit(taskId) {
+      const titleElement = document.getElementById('taskFormTitle');
+      if (!titleElement) return;
+
+      if (!taskId) {
+        titleElement.textContent = 'Задачи проекта';
+        return;
+      }
+
+      const task = state.tasks.find(item => item.id === taskId);
+      if (!task) return;
+
+      document.getElementById('taskId').value = task.id;
+      document.getElementById('taskName').value = safeText(task.name);
+      document.getElementById('taskStatus').value = safeText(task.status);
+      document.getElementById('taskEstimateHours').value = task.estimateHours ?? '';
+      titleElement.textContent = 'Редактирование задачи';
+    }
+
+    function resetTimeEntryForm() {
+      state.editingTimeEntryId = null;
+      const form = document.getElementById('timeEntryForm');
+      if (!form) return;
+      form.reset();
+      document.getElementById('timeEntryId').value = '';
+      document.getElementById('timeEntryStartedAt').value = formatDateInputValue(new Date().toISOString());
+      document.getElementById('timeEntryDurationHours').value = '';
+      document.getElementById('timeEntryComment').value = '';
+      document.getElementById('timeEntryFormTitle').textContent = 'Журнал времени';
+    }
+
+    function fillTimeEntryFormForEdit(entryId) {
+      const titleElement = document.getElementById('timeEntryFormTitle');
+      if (!titleElement) return;
+
+      if (!entryId) {
+        titleElement.textContent = 'Журнал времени';
+        resetTimeEntryFormDefaultsOnly();
+        return;
+      }
+
+      const entry = state.timeEntries.find(item => item.id === entryId);
+      if (!entry) return;
+
+      document.getElementById('timeEntryId').value = entry.id;
+      document.getElementById('timeEntryStartedAt').value = formatDateInputValue(entry.startedAt);
+      document.getElementById('timeEntryDurationHours').value = Number(entry.durationHours) || 0;
+      document.getElementById('timeEntryTaskId').value = entry.taskId || '';
+      document.getElementById('timeEntryComment').value = safeText(entry.comment || '');
+      document.getElementById('timeEntryFormTitle').textContent = 'Редактирование записи времени';
+    }
+
+    function resetTimeEntryFormDefaultsOnly() {
+      const startedAt = document.getElementById('timeEntryStartedAt');
+      if (startedAt && !startedAt.value) {
+        startedAt.value = formatDateInputValue(new Date().toISOString());
+      }
+    }
+
+    function handleProjectSubmit(event) {
+      event.preventDefault();
+
+      const id = document.getElementById('projectId').value.trim();
+      const name = document.getElementById('projectName').value.trim();
+      const price = Number(document.getElementById('projectPrice').value);
+      const expenses = Number(document.getElementById('projectExpenses').value);
+      const status = document.getElementById('projectStatus').value;
+      const description = document.getElementById('projectDescription').value.trim();
+
+      if (!name) {
+        alert('Введите название проекта.');
+        return;
+      }
+
+      if (price < 0 || expenses < 0) {
+        alert('Стоимость и расходы не могут быть отрицательными.');
+        return;
+      }
+
+      const now = new Date().toISOString();
+
+      if (id) {
+        const project = getProjectById(id);
+        if (!project) return;
+
+        project.name = name;
+        project.price = price;
+        project.expenses = expenses;
+        project.status = status;
+        project.description = description;
+        project.updatedAt = now;
+      } else {
+        const newProject = {
+          id: generateId('project'),
+          name,
+          price,
+          expenses,
+          status,
+          description,
+          createdAt: now,
+          updatedAt: now
+        };
+        state.projects.push(newProject);
+        state.selectedProjectId = newProject.id;
+      }
+
+      saveState();
+      renderAll();
+      fillProjectFormForEdit(state.selectedProjectId);
+    }
+
+    function handleTaskSubmit(event) {
+      event.preventDefault();
+
+      const project = getProjectById(state.selectedProjectId);
+      if (!project) return;
+
+      const id = document.getElementById('taskId').value.trim();
+      const name = document.getElementById('taskName').value.trim();
+      const status = document.getElementById('taskStatus').value;
+      const estimateRaw = document.getElementById('taskEstimateHours').value.trim();
+      const estimateHours = estimateRaw === '' ? null : Number(estimateRaw);
+
+      if (!name) {
+        alert('Введите название задачи.');
+        return;
+      }
+
+      if (estimateHours !== null && estimateHours < 0) {
+        alert('Оценка времени не может быть отрицательной.');
+        return;
+      }
+
+      const now = new Date().toISOString();
+
+      if (id) {
+        const task = state.tasks.find(item => item.id === id);
+        if (!task) return;
+
+        task.name = name;
+        task.status = status;
+        task.estimateHours = estimateHours;
+        task.updatedAt = now;
+      } else {
+        state.tasks.push({
+          id: generateId('task'),
+          projectId: project.id,
+          name,
+          status,
+          estimateHours,
+          createdAt: now,
+          updatedAt: now
+        });
+      }
+
+      state.editingTaskId = null;
+      saveState();
+      renderAll();
+      resetTaskForm();
+    }
+
+    function handleTimeEntrySubmit(event) {
+      event.preventDefault();
+
+      const project = getProjectById(state.selectedProjectId);
+      if (!project) return;
+
+      const id = document.getElementById('timeEntryId').value.trim();
+      const startedAt = document.getElementById('timeEntryStartedAt').value;
+      const durationHours = Number(document.getElementById('timeEntryDurationHours').value);
+      const taskId = document.getElementById('timeEntryTaskId').value || null;
+      const comment = document.getElementById('timeEntryComment').value.trim();
+
+      if (!startedAt) {
+        alert('Укажите дату и время начала.');
+        return;
+      }
+
+      if (Number.isNaN(durationHours) || durationHours < 0) {
+        alert('Длительность должна быть неотрицательной.');
+        return;
+      }
+
+      if (taskId) {
+        const task = state.tasks.find(item => item.id === taskId && item.projectId === project.id);
+        if (!task) {
+          alert('Выбранная задача не принадлежит текущему проекту.');
+          return;
+        }
+      }
+
+      const isoStartedAt = new Date(startedAt).toISOString();
+
+      if (id) {
+        const entry = state.timeEntries.find(item => item.id === id);
+        if (!entry) return;
+
+        entry.projectId = project.id;
+        entry.taskId = taskId;
+        entry.startedAt = isoStartedAt;
+        entry.durationHours = durationHours;
+        entry.comment = comment;
+        entry.updatedAt = new Date().toISOString();
+      } else {
+        state.timeEntries.push({
+          id: generateId('timeEntry'),
+          projectId: project.id,
+          taskId,
+          startedAt: isoStartedAt,
+          durationHours,
+          comment,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          source: 'manual'
+        });
+      }
+
+      state.editingTimeEntryId = null;
+      saveState();
+      renderAll();
+      resetTimeEntryForm();
+    }
+
+    function toggleProjectArchive(projectId) {
+      const project = getProjectById(projectId);
+      if (!project) return;
+
+      project.status = project.status === 'archived' ? 'active' : 'archived';
+      project.updatedAt = new Date().toISOString();
+
+      saveState();
+      renderAll();
+      fillProjectFormForEdit(projectId);
+    }
+
+    function deleteProject(projectId) {
+      const project = getProjectById(projectId);
+      if (!project) return;
+
+      const confirmed = confirm(`Удалить проект "${project.name}"?\nБудут удалены также все его задачи и записи времени.`);
+      if (!confirmed) return;
+
+      if (state.activeTimer && state.activeTimer.projectId === projectId) {
+        state.activeTimer = null;
+      }
+
+      state.projects = state.projects.filter(item => item.id !== projectId);
+      state.tasks = state.tasks.filter(item => item.projectId !== projectId);
+      state.timeEntries = state.timeEntries.filter(entry => entry.projectId !== projectId);
+
+      if (state.selectedProjectId === projectId) {
+        state.selectedProjectId = state.projects[0]?.id || null;
+      }
+
+      saveState();
+      renderAll();
+      resetProjectForm();
+    }
+
+    function deleteTask(taskId) {
+      const task = state.tasks.find(item => item.id === taskId);
+      if (!task) return;
+
+      const relatedEntriesCount = getTimeEntriesByTaskId(taskId).length;
+      const confirmed = confirm(`Удалить задачу "${task.name}"?\nЗаписей времени, привязанных к задаче: ${relatedEntriesCount}. Они останутся в проекте, но будут отвязаны от задачи.`);
+      if (!confirmed) return;
+
+      if (state.activeTimer && state.activeTimer.taskId === taskId) {
+        stopTimer(taskId, true);
+      }
+
+      state.timeEntries.forEach(entry => {
+        if (entry.taskId === taskId) {
+          entry.taskId = null;
+          entry.updatedAt = new Date().toISOString();
+        }
+      });
+
+      state.tasks = state.tasks.filter(item => item.id !== taskId);
+      if (state.editingTaskId === taskId) {
+        state.editingTaskId = null;
+      }
+
+      saveState();
+      renderAll();
+      resetTaskForm();
+    }
+
+    function deleteTimeEntry(entryId) {
+      const entry = state.timeEntries.find(item => item.id === entryId);
+      if (!entry) return;
+
+      const confirmed = confirm('Удалить эту запись времени?');
+      if (!confirmed) return;
+
+      state.timeEntries = state.timeEntries.filter(item => item.id !== entryId);
+      if (state.editingTimeEntryId === entryId) {
+        state.editingTimeEntryId = null;
+      }
+
+      saveState();
+      renderAll();
+      resetTimeEntryForm();
+    }
+
+    function startTimer(taskId) {
+      const task = state.tasks.find(item => item.id === taskId);
+      if (!task) return;
+
+      const project = getProjectById(task.projectId);
+      if (!project) return;
+
+      if (state.activeTimer) {
+        if (state.activeTimer.taskId === taskId) {
+          alert('Таймер для этой задачи уже запущен.');
+          return;
+        }
+
+        const shouldReplace = confirm('Сейчас уже запущен другой таймер. Остановить его и запустить новый?');
+        if (!shouldReplace) return;
+        stopTimer(state.activeTimer.taskId, true);
+      }
+
+      state.activeTimer = {
+        projectId: project.id,
+        taskId: task.id,
+        startedAt: new Date().toISOString()
+      };
+
+      saveState();
+      renderAll();
+    }
+
+    function stopTimer(taskId, silent = false) {
+      if (!state.activeTimer || state.activeTimer.taskId !== taskId) {
+        if (!silent) {
+          alert('Активный таймер для этой задачи не найден.');
+        }
+        return;
+      }
+
+      const timer = state.activeTimer;
+      const startedAtMs = new Date(timer.startedAt).getTime();
+      const endedAtMs = Date.now();
+      const durationHours = Math.max(0, (endedAtMs - startedAtMs) / 3600000);
+
+      state.timeEntries.push({
+        id: generateId('timeEntry'),
+        projectId: timer.projectId,
+        taskId: timer.taskId,
+        startedAt: new Date(startedAtMs).toISOString(),
+        durationHours,
+        comment: 'Запись создана таймером',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        source: 'timer'
+      });
+
+      state.activeTimer = null;
+      saveState();
+      renderAll();
+    }
+
+    function exportJson() {
+      const data = {
+        exportedAt: new Date().toISOString(),
+        app: 'freelance-project-tracker',
+        version: 2,
+        data: {
+          settings: deepClone(state.settings),
+          projects: deepClone(state.projects),
+          tasks: deepClone(state.tasks),
+          timeEntries: deepClone(state.timeEntries),
+          activeTimer: deepClone(state.activeTimer),
+          selectedProjectId: state.selectedProjectId,
+          selectedWeekStart: state.selectedWeekStart
+        }
+      };
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' });
+      downloadBlob(blob, `project-tracker-backup-${buildFileDateStamp()}.json`);
+    }
+
+    function importJsonFile(file) {
+      if (!file) return;
+
+      const shouldContinue = confirm(
+        'Перед импортом рекомендуется сделать резервную копию.\n\n' +
+        'Нажмите "ОК", чтобы продолжить импорт.\n' +
+        'Нажмите "Отмена", чтобы сначала сделать экспорт JSON.'
+      );
+      if (!shouldContinue) return;
+
+      const reader = new FileReader();
+
+      reader.onload = () => {
+        try {
+          const parsed = JSON.parse(String(reader.result));
+
+          const importedData = parsed?.data;
+          if (!importedData || typeof importedData !== 'object') {
+            throw new Error('В JSON нет блока data.');
+          }
+
+          const nextSettings = {
+            targetRate: [10, 15, 20].includes(Number(importedData.settings?.targetRate))
+              ? Number(importedData.settings.targetRate)
+              : 15
+          };
+
+          const nextProjects = Array.isArray(importedData.projects) ? importedData.projects : null;
+          const nextTasks = Array.isArray(importedData.tasks) ? importedData.tasks : null;
+          const nextTimeEntries = Array.isArray(importedData.timeEntries) ? importedData.timeEntries : null;
+          const nextActiveTimer = importedData.activeTimer && typeof importedData.activeTimer === 'object'
+            ? importedData.activeTimer
+            : null;
+
+          if (!nextProjects || !nextTasks || !nextTimeEntries) {
+            throw new Error('Структура JSON неполная или повреждена.');
+          }
+
+          state.settings = nextSettings;
+          state.projects = nextProjects;
+          state.tasks = nextTasks;
+          state.timeEntries = nextTimeEntries;
+          state.activeTimer = nextActiveTimer;
+          state.selectedProjectId = importedData.selectedProjectId || state.projects[0]?.id || null;
+          state.selectedWeekStart = importedData.selectedWeekStart || getStartOfWeek(new Date()).toISOString();
+          state.editingTaskId = null;
+          state.editingTimeEntryId = null;
+
+          saveState();
+          renderAll();
+          resetProjectForm();
+          alert('Импорт успешно завершен.');
+        } catch (error) {
+          console.error(error);
+          alert('Ошибка импорта. Текущие данные не были изменены.');
+        }
+      };
+
+      reader.onerror = () => {
+        alert('Не удалось прочитать файл. Текущие данные не были изменены.');
+      };
+
+      reader.readAsText(file, 'utf-8');
+    }
+
+    function exportCsv() {
+      const rows = [
+        ['project_name', 'project_status', 'task_name', 'started_at', 'duration_hours', 'comment', 'source']
+      ];
+
+      const sortedEntries = [...state.timeEntries].sort((a, b) => new Date(a.startedAt) - new Date(b.startedAt));
+
+      sortedEntries.forEach(entry => {
+        const project = getProjectById(entry.projectId);
+        const task = entry.taskId ? state.tasks.find(item => item.id === entry.taskId) : null;
+
+        rows.push([
+          project?.name || '',
+          statusLabel(project?.status || ''),
+          task?.name || '',
+          entry.startedAt || '',
+          String(Number(entry.durationHours) || 0),
+          entry.comment || '',
+          entry.source || ''
+        ]);
+      });
+
+      const csv = rows.map(row => row.map(csvEscapeCell).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      downloadBlob(blob, `time-entries-${buildFileDateStamp()}.csv`);
+    }
+
+    function csvEscapeCell(value) {
+      const text = safeText(value).replaceAll('"', '""');
+      return `"${text}"`;
+    }
+
+    function downloadBlob(blob, fileName) {
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 500);
+    }
+
+    function buildFileDateStamp() {
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}`;
+    }
+
+    function bindStaticEvents() {
+      document.getElementById('projectForm').addEventListener('submit', handleProjectSubmit);
+
+      document.getElementById('resetProjectFormBtn').addEventListener('click', () => {
+        resetProjectForm();
+      });
+
+      document.getElementById('targetRateSelect').addEventListener('change', (event) => {
+        const nextRate = Number(event.target.value);
+        if (![10, 15, 20].includes(nextRate)) return;
+        state.settings.targetRate = nextRate;
+        saveState();
+        renderAll();
+      });
+
+      document.getElementById('exportJsonBtn').addEventListener('click', exportJson);
+      document.getElementById('importJsonBtn').addEventListener('click', () => {
+        document.getElementById('importJsonInput').click();
+      });
+      document.getElementById('importJsonInput').addEventListener('change', (event) => {
+        const file = event.target.files?.[0];
+        importJsonFile(file);
+        event.target.value = '';
+      });
+
+      document.getElementById('exportCsvBtn').addEventListener('click', exportCsv);
+
+      document.getElementById('prevWeekBtn').addEventListener('click', () => {
+        const start = getSelectedWeekStart();
+        state.selectedWeekStart = addDays(start, -7).toISOString();
+        saveState();
+        renderAll();
+      });
+
+      document.getElementById('currentWeekBtn').addEventListener('click', () => {
+        state.selectedWeekStart = getStartOfWeek(new Date()).toISOString();
+        saveState();
+        renderAll();
+      });
+
+      document.getElementById('nextWeekBtn').addEventListener('click', () => {
+        const start = getSelectedWeekStart();
+        state.selectedWeekStart = addDays(start, 7).toISOString();
+        saveState();
+        renderAll();
+      });
+    }
+
+    function ensureSelectedProjectExists() {
+      if (state.selectedProjectId && getProjectById(state.selectedProjectId)) {
+        return;
+      }
+      state.selectedProjectId = state.projects[0]?.id || null;
+    }
+
+    function validateActiveTimerAfterLoad() {
+      if (!state.activeTimer) return;
+      const task = state.tasks.find(item => item.id === state.activeTimer.taskId);
+      const project = state.projects.find(item => item.id === state.activeTimer.projectId);
+      const startedAtMs = new Date(state.activeTimer.startedAt).getTime();
+
+      if (!task || !project || Number.isNaN(startedAtMs)) {
+        state.activeTimer = null;
+      }
+    }
+
+    function ensureSelectedWeekExists() {
+      if (!state.selectedWeekStart) {
+        state.selectedWeekStart = getStartOfWeek(new Date()).toISOString();
+      }
+    }
+
+    function renderAll() {
+      ensureSelectedProjectExists();
+      ensureSelectedWeekExists();
+      document.getElementById('targetRateSelect').value = String(state.settings.targetRate);
+      renderSummary();
+      renderCalendarWeek();
+      renderProjectList();
+      renderProjectDetails();
+      saveState();
+    }
+
+    let summaryTimerInterval = null;
+
+    function startUiRefreshLoop() {
+      if (summaryTimerInterval) {
+        clearInterval(summaryTimerInterval);
+      }
+      summaryTimerInterval = setInterval(() => {
+        if (state.activeTimer) {
+          renderSummary();
+          renderCalendarWeek();
+          renderProjectDetails();
+        }
+      }, 1000);
+    }
+
+    function init() {
+      loadState();
+      validateActiveTimerAfterLoad();
+      ensureSelectedWeekExists();
+      bindStaticEvents();
+      resetProjectForm();
+      renderAll();
+      startUiRefreshLoop();
+    }
+
+    init();
+  </script>
+</body>
+</html>
