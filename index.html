@@ -433,6 +433,10 @@
       margin-top: -2px;
     }
 
+    .inline-note.mobile-hint {
+      display: none;
+    }
+
     .hidden {
       display: none !important;
     }
@@ -2076,7 +2080,7 @@
       }
 
       return `<div class="stage-table">${head}${body}${noStageRow}${totalRow}</div>
-        <div class="inline-note mobile-hint" style="margin-top: 6px; display: none;">Таблицу можно прокрутить вбок — все семь колонок сохраняются.</div>
+        <div class="inline-note mobile-hint" style="margin-top: 6px;">Таблицу можно прокрутить вбок — все семь колонок сохраняются.</div>
         <div class="inline-note" style="margin-top: 10px">${escapeHtml(note)}</div>`;
     }
 
