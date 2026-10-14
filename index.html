@@ -2225,9 +2225,13 @@
       document.getElementById('projectExpenses').value = '0';
       document.getElementById('projectArea').value = '';
       document.getElementById('projectFallbackStage').value = '';
-      ['Plan', 'Viz', 'Drawings', 'Layouts', 'Furniture'].forEach(name => {
-        document.getElementById('stage' + name).checked = false;
-        document.getElementById('stageRate' + name).value = '';
+      // список этапов берём из PROJECT_STAGES, чтобы он не разъезжался с формой
+      PROJECT_STAGES.forEach(stage => {
+        const name = stage.id.charAt(0).toUpperCase() + stage.id.slice(1);
+        const box = document.getElementById('stage' + name);
+        const rate = document.getElementById('stageRate' + name);
+        if (box) box.checked = false;
+        if (rate) rate.value = '';
       });
       document.getElementById('projectStatus').value = 'active';
       document.getElementById('projectFormTitle').textContent = 'Новый проект';
