@@ -658,7 +658,7 @@
 
     .stage-row {
       display: grid;
-      grid-template-columns: 1.6fr 0.85fr 0.95fr 0.9fr 0.95fr 0.9fr 0.95fr;
+      grid-template-columns: 1.5fr 0.85fr 0.95fr 0.95fr 0.95fr 0.9fr 0.9fr;
       gap: 9px;
       align-items: center;
       font-size: 13px;
@@ -804,9 +804,9 @@
         <div class="card-sub" id="summaryNetIncomeSub">Только завершённые проекты</div>
       </div>
       <div class="card">
-        <div class="card-label">Средний факт за м²</div>
+        <div class="card-label">Средний факт за м² (завершённые)</div>
         <div class="card-value" id="summaryFactPerM2">Нет данных</div>
-        <div class="card-sub" id="summaryFactPerM2Sub">Только завершённые проекты</div>
+        <div class="card-sub" id="summaryFactPerM2Sub">Цена проекта ÷ площадь</div>
       </div>
 
       <div class="card">
@@ -1299,6 +1299,11 @@
       const finishedArea = finishedProjects.reduce((sum, project) => sum + (Number(project.area) || 0), 0);
       const finishedPriceTotal = finishedProjects.reduce((sum, project) => sum + (Number(project.price) || 0), 0);
       const finishedFactPerM2 = finishedArea > 0 ? (finishedPriceTotal / finishedArea) : null;
+      // реальная стоимость за м² по его часам: часы × целевая ставка ÷ площадь
+      const finishedRealCost = finishedProjects.reduce((sum, project) => {
+        return sum + calculateProjectHours(project.id) * state.settings.targetRate;
+      }, 0);
+      const finishedRealPerM2 = finishedArea > 0 ? (finishedRealCost / finishedArea) : null;
 
       return {
         totalHours,
@@ -1308,6 +1313,8 @@
         finishedCount: finishedProjects.length,
         finishedArea,
         finishedFactPerM2,
+        finishedRealCost,
+        finishedRealPerM2,
         finishedHours,
         finishedNetIncome,
         finishedRate
@@ -1472,8 +1479,10 @@
       } else {
         factPerM2Element.textContent = `${formatMoney(metrics.finishedFactPerM2)}/м²`;
         factPerM2Element.className = 'card-value';
-        factPerM2SubElement.textContent =
-          `Только завершённые: ${metrics.finishedCount} проект(а) · ${formatArea(metrics.finishedArea)}`;
+        factPerM2SubElement.textContent = metrics.finishedRealPerM2 === null
+          ? `Цена ÷ площадь · ${metrics.finishedCount} проект(а) на ${formatArea(metrics.finishedArea)}`
+          : `Цена ${formatMoney(metrics.finishedFactPerM2)}/м² · по твоим часам `
+            + `${formatMoney(metrics.finishedRealPerM2)}/м² (${formatMoney(metrics.finishedRealCost)})`;
       }
 
       const effectiveRateElement = document.getElementById('summaryEffectiveRate');
@@ -1656,6 +1665,9 @@
               <div>Задачи: <strong>${getTasksByProjectId(project.id).length}</strong></div>
               <div>Площадь: <strong>${formatArea(project.area)}</strong></div>
               <div>За м²: <strong>${formatPricePerM2(metrics.price, project.area)}</strong></div>
+              <div>Реально за м²: <strong>${Number(project.area) > 0
+                ? formatMoney((metrics.totalHours * state.settings.targetRate) / Number(project.area)) + '/м²'
+                : '—'}</strong></div>
               <div>По этапам: <strong>${projectStageTotal(project) > 0 ? formatMoney(projectStageTotal(project)) : '—'}</strong></div>
               <div>Этапов: <strong>${getProjectStages(project).length} из ${PROJECT_STAGES.length}</strong></div>
             </div>
@@ -1752,8 +1764,18 @@
               <div class="value">${formatArea(project.area)}</div>
             </div>
             <div class="metric-box">
-              <div class="label">Факт за м² (цена ÷ площадь)</div>
+              <div class="label">Цена за м² (по прайсу)</div>
               <div class="value">${formatPricePerM2(metrics.price, project.area)}</div>
+            </div>
+            <div class="metric-box">
+              <div class="label">Реально стоит по твоим часам</div>
+              <div class="value">${formatMoney(metrics.totalHours * state.settings.targetRate)}</div>
+            </div>
+            <div class="metric-box">
+              <div class="label">Реальная стоимость за м²</div>
+              <div class="value">${Number(project.area) > 0
+                ? formatMoney((metrics.totalHours * state.settings.targetRate) / Number(project.area)) + '/м²'
+                : '—'}</div>
             </div>
             <div class="metric-box">
               <div class="label">Доход после расходов</div>
@@ -1943,102 +1965,115 @@
       `;
     }
 
-    // Разбивка по этапам: ставка за м², сумма по ставке, фактические деньги проекта
-    // (если цена проекта отличается от суммы по ставкам — раскладываем пропорционально),
-    // часы и сколько реально выходит за час работы на каждом этапе.
+    // «По часам» — сколько этап (и проект) должен стоить, чтобы его часы
+    // оплачивались по целевой ставке. Делим на площадь: получаем реальную
+    // стоимость метра. Рядом — цена из прайса, чтобы видеть недобор или запас.
     function buildStageBreakdownHtml(project) {
       const stages = getProjectStages(project);
       const area = Number(project.area) || 0;
       const price = Number(project.price) || 0;
+      const targetRate = state.settings.targetRate;
 
       if (stages.length === 0) {
         return '<div class="empty">Состав работ не отмечен — отметьте этапы в форме проекта.</div>';
       }
 
       const rows = stages.map(stage => {
-        const rate = getStageRate(project, stage.id);
-        const planned = rate * area;
         const hours = projectStageHours(project.id, stage.id);
-        return { stage, rate, planned, hours };
+        const realCost = hours * targetRate;
+        const planned = getStageRate(project, stage.id) * area;
+        return { stage, hours, realCost, planned };
       });
 
       const plannedTotal = rows.reduce((sum, row) => sum + row.planned, 0);
       const hasActual = plannedTotal > 0 && price > 0 && Math.abs(price - plannedTotal) > 0.005;
 
       rows.forEach(row => {
-        // факт: цена проекта, разложенная по этапам пропорционально ставкам
-        row.actual = hasActual
+        row.pricePart = hasActual
           ? price * (row.planned / plannedTotal)
           : (row.planned || 0);
-        row.plannedPerHour = (row.planned > 0 && row.hours > 0) ? (row.planned / row.hours) : null;
-        row.actualPerHour = (row.actual > 0 && row.hours > 0) ? (row.actual / row.hours) : null;
+        row.realPerM2 = area > 0 ? (row.realCost / area) : null;
+        row.pricePerM2 = area > 0 ? (row.pricePart / area) : null;
+        row.delta = row.pricePart - row.realCost;
+        row.realPerHour = row.hours > 0 ? (row.realCost / row.hours) : null;
+        row.pricePerHour = row.hours > 0 ? (row.pricePart / row.hours) : null;
       });
 
       const head = `
         <div class="stage-row head">
           <span>Этап</span>
-          <span class="num">Ставка $/м²</span>
-          <span class="num">По ставке</span>
           <span class="num">Часы</span>
-          <span class="num hide-small">Факт $</span>
-          <span class="num">Факт $/м²</span>
-          <span class="num">Факт $/ч</span>
+          <span class="num">По часам</span>
+          <span class="num">По часам $/м²</span>
+          <span class="num">Цена этапа</span>
+          <span class="num">Цена $/м²</span>
+          <span class="num">Дельта</span>
         </div>`;
 
-      const body = rows.map(row => `
+      const body = rows.map(row => {
+        const deltaClass = row.hours > 0 ? (row.delta >= 0 ? 'good' : 'bad') : '';
+        return `
         <div class="stage-row">
           <span class="stage-name">${escapeHtml(row.stage.title)}</span>
-          <span class="num">${row.rate ? '$' + formatRate(row.rate) : '—'}</span>
-          <span class="num">${row.planned ? formatMoney(row.planned) : '—'}</span>
           <span class="num">${formatDuration(row.hours)}</span>
-          <span class="num hide-small">${row.actual ? formatMoney(row.actual) : '—'}</span>
-          <span class="num">${(row.actual && area) ? '$' + formatRate(row.actual / area) : '—'}</span>
-          <span class="num ${row.actualPerHour !== null ? (row.actualPerHour >= state.settings.targetRate ? 'good' : 'bad') : ''}">${
-            row.actualPerHour !== null ? formatMoney(row.actualPerHour) + '/ч' : 'нет часов'}</span>
-        </div>`).join('');
+          <span class="num">${row.realCost ? formatMoney(row.realCost) : '—'}</span>
+          <span class="num">${row.realPerM2 !== null && row.realCost ? '$' + formatRate(row.realPerM2) : '—'}</span>
+          <span class="num">${row.pricePart ? formatMoney(row.pricePart) : '—'}</span>
+          <span class="num">${row.pricePerM2 ? '$' + formatRate(row.pricePerM2) : '—'}</span>
+          <span class="num ${deltaClass}">${row.hours > 0 ? formatMoney(row.delta) : '—'}</span>
+        </div>`;
+      }).join('');
 
-      // часы по проекту, которые не попали ни в один этап — показываем отдельной строкой
       const projectHours = calculateProjectHours(project.id);
       const stageHoursSum = rows.reduce((sum, row) => sum + row.hours, 0);
-      const noStageHours = Math.max(0, projectHours - stageHoursSum);   // ни этапа, ни этапа у задачи
+      const noStageHours = Math.max(0, projectHours - stageHoursSum);
       const noStageRow = noStageHours > 0.0001
         ? `
         <div class="stage-row">
           <span class="stage-name">Без этапа</span>
-          <span class="num">—</span>
-          <span class="num">—</span>
           <span class="num">${formatDuration(noStageHours)}</span>
-          <span class="num hide-small">—</span>
+          <span class="num">${formatMoney(noStageHours * targetRate)}</span>
+          <span class="num">${area > 0 ? '$' + formatRate((noStageHours * targetRate) / area) : '—'}</span>
+          <span class="num">—</span>
           <span class="num">—</span>
           <span class="num">—</span>
         </div>`
         : '';
 
-      const hoursTotal = rows.reduce((sum, row) => sum + row.hours, 0);
-      const actualTotal = rows.reduce((sum, row) => sum + row.actual, 0);
+      const realTotal = projectHours * targetRate;
+      const realPerM2Total = area > 0 ? (realTotal / area) : null;
+      const pricePerM2Total = area > 0 ? (price / area) : null;
       const totalRow = `
         <div class="stage-row total">
           <span>Итого</span>
-          <span class="num">${plannedTotal ? '$' + formatRate(plannedTotal / (area || 1)) : '—'}</span>
-          <span class="num">${plannedTotal ? formatMoney(plannedTotal) : '—'}</span>
-          <span class="num">${formatDuration(hoursTotal + noStageHours)}</span>
-          <span class="num hide-small">${actualTotal ? formatMoney(actualTotal) : '—'}</span>
-          <span class="num">${(actualTotal && area) ? '$' + formatRate(actualTotal / area) : '—'}</span>
-          <span class="num">${(hoursTotal + noStageHours) > 0 && actualTotal > 0
-            ? formatMoney(actualTotal / (hoursTotal + noStageHours)) + '/ч' : '—'}</span>
+          <span class="num">${formatDuration(projectHours)}</span>
+          <span class="num">${formatMoney(realTotal)}</span>
+          <span class="num">${realPerM2Total !== null ? '$' + formatRate(realPerM2Total) : '—'}</span>
+          <span class="num">${price ? formatMoney(price) : '—'}</span>
+          <span class="num">${pricePerM2Total ? '$' + formatRate(pricePerM2Total) : '—'}</span>
+          <span class="num ${projectHours > 0 ? (price - realTotal >= 0 ? 'good' : 'bad') : ''}">${
+            projectHours > 0 ? formatMoney(price - realTotal) : '—'}</span>
         </div>`;
 
       let note;
-      if (plannedTotal === 0) {
-        note = 'Ставки за м² не заданы: впишите их в форме проекта — тогда появится сумма по каждому этапу и фактическая стоимость часа.';
-      } else if (hasActual) {
-        note = `Цена проекта ${formatMoney(price)} отличается от суммы по ставкам ${formatMoney(plannedTotal)} на ${formatMoney(price - plannedTotal)} — факт разложен по этапам пропорционально ставкам: за час выходит ${formatMoney(actualTotal / (hoursTotal || 1))} при цели $${state.settings.targetRate}/ч.`;
+      if (projectHours <= 0) {
+        note = 'По проекту ещё нет записей времени — считать нечего.';
       } else {
-        note = `Ставки сходятся с ценой проекта один в один: ${formatMoney(plannedTotal)} при ${formatArea(area)} (${formatMoney(plannedTotal / (area || 1))}/м² в сумме) — факт за час считается прямо по ставкам.`;
+        const perHour = price / projectHours;
+        note = `По твоим часам проект должен стоить ${formatMoney(realTotal)} → ${formatMoney(realM2(realTotal, area))}/м² `
+          + `(при цели $${targetRate}/ч). Ты продаёшь за ${price ? formatMoney(price) : '—'}`
+          + `${price && pricePerM2Total ? ' → ' + formatMoney(pricePerM2Total) + '/м²' : ''}. `
+          + `Фактически выходит ${formatMoney(perHour)}/ч: `
+          + (price - realTotal >= 0 ? `запас ${formatMoney(price - realTotal)}.`
+                                    : `недобор ${formatMoney(realTotal - price)}.`);
       }
 
       return `<div class="stage-table">${head}${body}${noStageRow}${totalRow}</div>
         <div class="inline-note" style="margin-top: 10px">${escapeHtml(note)}</div>`;
+    }
+
+    function realM2(total, area) {
+      return area > 0 ? (total / area) : 0;
     }
 
     function buildTaskDistributionHtml(projectId, tasks) {
