@@ -1926,6 +1926,22 @@
             row.actualPerHour !== null ? formatMoney(row.actualPerHour) + '/ч' : 'нет часов'}</span>
         </div>`).join('');
 
+      // часы по проекту, которые не попали ни в один этап — показываем отдельной строкой
+      const projectHours = calculateProjectHours(project.id);
+      const stageHoursSum = rows.reduce((sum, row) => sum + row.hours, 0);
+      const noStageHours = Math.max(0, projectHours - stageHoursSum);
+      const noStageRow = noStageHours > 0.0001
+        ? `
+        <div class="stage-row">
+          <span class="stage-name">Без этапа</span>
+          <span class="num">—</span>
+          <span class="num">—</span>
+          <span class="num">${formatDuration(noStageHours)}</span>
+          <span class="num hide-small">—</span>
+          <span class="num">—</span>
+        </div>`
+        : '';
+
       const hoursTotal = rows.reduce((sum, row) => sum + row.hours, 0);
       const actualTotal = rows.reduce((sum, row) => sum + row.actual, 0);
       const totalRow = `
@@ -1933,7 +1949,7 @@
           <span>Итого</span>
           <span class="num">${plannedTotal ? formatMoney(plannedTotal / (area || 1)) : '—'}</span>
           <span class="num">${plannedTotal ? formatMoney(plannedTotal) : '—'}</span>
-          <span class="num">${formatDuration(hoursTotal)}</span>
+          <span class="num">${formatDuration(hoursTotal + noStageHours)}</span>
           <span class="num hide-small">${actualTotal ? formatMoney(actualTotal) : '—'}</span>
           <span class="num">${hoursTotal > 0 && actualTotal > 0 ? formatMoney(actualTotal / hoursTotal) + '/ч' : '—'}</span>
         </div>`;
@@ -1947,7 +1963,7 @@
         note = 'Сумма по ставкам совпадает с ценой проекта — факт за час считается по ставкам.';
       }
 
-      return `<div class="stage-table">${head}${body}${totalRow}</div>
+      return `<div class="stage-table">${head}${body}${noStageRow}${totalRow}</div>
         <div class="inline-note" style="margin-top: 10px">${escapeHtml(note)}</div>`;
     }
 
