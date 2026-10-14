@@ -1097,9 +1097,17 @@
         .replaceAll("'", '&#039;');
     }
 
-    function formatMoney(value) {
+    // Он просил показывать доллары с шагом 0,5: 371.38 → $371.5.
+    // Округление только в отображении — в расчётах и в форме значения остаются точными.
+    function roundToHalf(value) {
       const number = Number(value) || 0;
-      return '$' + number.toFixed(2);
+      return Math.round(number * 2) / 2;
+    }
+
+    function formatMoney(value) {
+      const rounded = roundToHalf(value);
+      const isWhole = Math.abs(rounded - Math.round(rounded)) < 1e-9;
+      return '$' + (isWhole ? String(Math.round(rounded)) : rounded.toFixed(1));
     }
 
     // Ставка за м²: показываем до 4 знаков, лишние нули убираем (8 → «8», 8.1786 → «8.1786»).
@@ -2028,9 +2036,9 @@
           <span class="stage-name">${escapeHtml(row.stage.title)}</span>
           <span class="num">${formatDuration(row.hours)}</span>
           <span class="num">${row.realCost ? formatMoney(row.realCost) : '—'}</span>
-          <span class="num">${row.realPerM2 !== null && row.realCost ? '$' + formatRate(row.realPerM2) : '—'}</span>
+          <span class="num">${row.realPerM2 !== null && row.realCost ? formatMoney(row.realPerM2) : '—'}</span>
           <span class="num">${row.pricePart ? formatMoney(row.pricePart) : '—'}</span>
-          <span class="num">${row.pricePerM2 ? '$' + formatRate(row.pricePerM2) : '—'}</span>
+          <span class="num">${row.pricePerM2 ? formatMoney(row.pricePerM2) : '—'}</span>
           <span class="num ${deltaClass}">${row.hours > 0 ? formatMoney(row.delta) : '—'}</span>
         </div>`;
       }).join('');
@@ -2044,7 +2052,7 @@
           <span class="stage-name">Без этапа</span>
           <span class="num">${formatDuration(noStageHours)}</span>
           <span class="num">${formatMoney(noStageHours * targetRate)}</span>
-          <span class="num">${area > 0 ? '$' + formatRate((noStageHours * targetRate) / area) : '—'}</span>
+          <span class="num">${area > 0 ? formatMoney((noStageHours * targetRate) / area) : '—'}</span>
           <span class="num">—</span>
           <span class="num">—</span>
           <span class="num">—</span>
@@ -2059,9 +2067,9 @@
           <span>Итого</span>
           <span class="num">${formatDuration(projectHours)}</span>
           <span class="num">${formatMoney(realTotal)}</span>
-          <span class="num">${realPerM2Total !== null ? '$' + formatRate(realPerM2Total) : '—'}</span>
+          <span class="num">${realPerM2Total !== null ? formatMoney(realPerM2Total) : '—'}</span>
           <span class="num">${price ? formatMoney(price) : '—'}</span>
-          <span class="num">${pricePerM2Total ? '$' + formatRate(pricePerM2Total) : '—'}</span>
+          <span class="num">${pricePerM2Total ? formatMoney(pricePerM2Total) : '—'}</span>
           <span class="num ${projectHours > 0 ? (price - realTotal >= 0 ? 'good' : 'bad') : ''}">${
             projectHours > 0 ? formatMoney(price - realTotal) : '—'}</span>
         </div>`;
