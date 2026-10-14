@@ -929,15 +929,10 @@
                 <input type="checkbox" id="stageDrawings" />
                 <span style="flex: 1;">3 этап — чертежи</span>
                 <input type="number" id="stageRateDrawings" min="0" step="0.0001" placeholder="$/м²" style="width: 104px;" title="Цена за м² по этапу" />
-              </label>
-              <label class="check-row">
-                <input type="checkbox" id="stageLayouts" />
-                <span style="flex: 1;">4 этап — развертки</span>
-                <input type="number" id="stageRateLayouts" min="0" step="0.0001" placeholder="$/м²" style="width: 104px;" title="Цена за м² по этапу" />
-              </label>
+              </label>
               <label class="check-row">
                 <input type="checkbox" id="stageFurniture" />
-                <span style="flex: 1;">5 этап — заказные позиции мебели</span>
+                <span style="flex: 1;">4 этап — заказные позиции мебели</span>
                 <input type="number" id="stageRateFurniture" min="0" step="0.0001" placeholder="$/м²" style="width: 104px;" title="Цена за м² по этапу" />
               </label>
             </div>
@@ -1001,24 +996,35 @@
       { id: 'plan', title: '1 · Планировка' },
       { id: 'viz', title: '2 · Визуализация' },
       { id: 'drawings', title: '3 · Чертежи' },
-      { id: 'layouts', title: '4 · Развертки' },
-      { id: 'furniture', title: '5 · Заказные позиции мебели' }
+      { id: 'furniture', title: '4 · Заказные позиции мебели' }
     ];
 
+    // Развертки он объединил с чертежами: старые данные с 'layouts' читаем как чертежи.
+    const STAGE_ALIASES = { layouts: 'drawings' };
+
+    function normalizeStageId(stageId) {
+      return STAGE_ALIASES[stageId] || stageId;
+    }
+
     function getProjectStages(project) {
-      const list = Array.isArray(project && project.stages) ? project.stages : [];
+      const list = Array.isArray(project && project.stages) ? project.stages.map(normalizeStageId) : [];
       return PROJECT_STAGES.filter(stage => list.includes(stage.id));
     }
 
     function stageTitle(stageId) {
-      const stage = PROJECT_STAGES.find(item => item.id === stageId);
+      const stage = PROJECT_STAGES.find(item => item.id === normalizeStageId(stageId));
       return stage ? stage.title : 'Без этапа';
     }
 
     // Цена за м² у каждого этапа: project.stageRates = { plan: 12, drawings: 18, ... }
     function getStageRate(project, stageId) {
       const rates = (project && project.stageRates) || {};
-      return Number(rates[stageId]) || 0;
+      let total = Number(rates[stageId]) || 0;
+      // если у проекта остались старые ставки разверток — прибавляем их к чертежам
+      Object.keys(STAGE_ALIASES).forEach(oldId => {
+        if (STAGE_ALIASES[oldId] === stageId) total += Number(rates[oldId]) || 0;
+      });
+      return total;
     }
 
     function projectStageTotal(project) {
@@ -1030,11 +1036,11 @@
     // Так часы старых записей попадают в этапы без перезаписи данных.
     function getEntryStage(entry) {
       if (!entry) return null;
-      if (entry.stage) return entry.stage;
+      if (entry.stage) return normalizeStageId(entry.stage);
       const task = entry.taskId ? state.tasks.find(item => item.id === entry.taskId) : null;
-      if (task && task.stage) return task.stage;
+      if (task && task.stage) return normalizeStageId(task.stage);
       const project = getProjectById(entry.projectId);
-      return (project && project.fallbackStage) || null;
+      return (project && project.fallbackStage) ? normalizeStageId(project.fallbackStage) : null;
     }
 
     function entryStageIsInherited(entry) {
@@ -1042,8 +1048,9 @@
     }
 
     function projectStageHours(projectId, stageId) {
+      const wanted = normalizeStageId(stageId);
       return state.timeEntries
-        .filter(entry => entry.projectId === projectId && getEntryStage(entry) === stageId)
+        .filter(entry => entry.projectId === projectId && getEntryStage(entry) === wanted)
         .reduce((sum, entry) => sum + calculateEntryHours(entry), 0);
     }
 
