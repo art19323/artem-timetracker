@@ -1123,6 +1123,17 @@
       };
     }
 
+    // Итоговые записи «до трекера» — это сумма за период, а не одна сессия.
+    // В общих часах и в ставках проектов они участвуют, а в недельные средние — нет:
+    // иначе одна такая запись делает «неделю» из одного дня.
+    const BULK_ENTRY_COMMENT = 'итог до трекера — не сессия';
+
+    function isBulkEntry(entry) {
+      if (!entry) return false;
+      if (entry.bulk === true) return true;
+      return String(entry.comment || '').trim().toLowerCase() === BULK_ENTRY_COMMENT;
+    }
+
     // Прошедшие недели с данными: текущая неделя не берётся, недели без часов
     // (нулевые) в статистику не попадают.
     function getPastWeeksStats() {
@@ -1130,6 +1141,7 @@
       const buckets = new Map();
 
       state.timeEntries.forEach(entry => {
+        if (isBulkEntry(entry)) return;
         const started = new Date(entry.startedAt);
         if (Number.isNaN(started.getTime())) return;
         const weekStart = getStartOfWeek(started).getTime();
@@ -1206,7 +1218,7 @@
         weekHoursElement.textContent = `${formatHours(pastWeeks.avgHoursPerWeek)} ч`;
         weekHoursElement.className = 'card-value';
         weekHoursSubElement.textContent =
-          `${pastWeeks.count} прошедш. недель(и) с данными · всего ${formatHours(pastWeeks.totalHours)} ч, текущая неделя не считается`;
+          `${pastWeeks.count} прошедш. недель(и) с данными · всего ${formatHours(pastWeeks.totalHours)} ч; текущая неделя и итоговые записи не считаются`;
         weekAvgElement.textContent = `${formatHours(pastWeeks.avgPerDay)} ч`;
         weekAvgElement.className = 'card-value';
         weekAvgSubElement.textContent =
