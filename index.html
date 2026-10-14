@@ -1964,7 +1964,8 @@
           <span class="num">${plannedTotal ? formatMoney(plannedTotal) : '—'}</span>
           <span class="num">${formatDuration(hoursTotal + noStageHours)}</span>
           <span class="num hide-small">${actualTotal ? formatMoney(actualTotal) : '—'}</span>
-          <span class="num">${hoursTotal > 0 && actualTotal > 0 ? formatMoney(actualTotal / hoursTotal) + '/ч' : '—'}</span>
+          <span class="num">${(hoursTotal + noStageHours) > 0 && actualTotal > 0
+            ? formatMoney(actualTotal / (hoursTotal + noStageHours)) + '/ч' : '—'}</span>
         </div>`;
 
       let note;
