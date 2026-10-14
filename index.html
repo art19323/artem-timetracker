@@ -866,6 +866,15 @@
             </div>
 
             <label>
+              Этап для записей без задачи
+              <select id="projectFallbackStage">
+                <option value="">Не задан</option>
+                ${PROJECT_STAGES.map(stage => `<option value="${stage.id}">${escapeHtml(stage.title)}</option>`).join('')}
+              </select>
+            </label>
+            <div class="inline-note">Записи времени по этому проекту без задачи и без своего этапа будут считаться этим этапом.</div>
+
+            <label>
               Статус
               <select id="projectStatus">
                 <option value="active">Активный</option>
@@ -994,7 +1003,9 @@
       if (!entry) return null;
       if (entry.stage) return entry.stage;
       const task = entry.taskId ? state.tasks.find(item => item.id === entry.taskId) : null;
-      return (task && task.stage) || null;
+      if (task && task.stage) return task.stage;
+      const project = getProjectById(entry.projectId);
+      return (project && project.fallbackStage) || null;
     }
 
     function entryStageIsInherited(entry) {
@@ -2110,6 +2121,7 @@
       document.getElementById('projectPrice').value = '0';
       document.getElementById('projectExpenses').value = '0';
       document.getElementById('projectArea').value = '';
+      document.getElementById('projectFallbackStage').value = '';
       ['Plan', 'Viz', 'Drawings', 'Layouts', 'Furniture'].forEach(name => {
         document.getElementById('stage' + name).checked = false;
         document.getElementById('stageRate' + name).value = '';
@@ -2127,6 +2139,7 @@
       document.getElementById('projectPrice').value = Number(project.price) || 0;
       document.getElementById('projectExpenses').value = Number(project.expenses) || 0;
       document.getElementById('projectArea').value = project.area ? Number(project.area) : '';
+      document.getElementById('projectFallbackStage').value = project.fallbackStage || '';
       const stages = Array.isArray(project.stages) ? project.stages : [];
       PROJECT_STAGES.forEach(stage => {
         const name = stage.id.charAt(0).toUpperCase() + stage.id.slice(1);
@@ -2229,6 +2242,7 @@
           stageRates[stage.id] = Number(document.getElementById('stageRate' + name).value) || 0;
         }
       });
+      const fallbackStage = document.getElementById('projectFallbackStage').value || null;
       const status = document.getElementById('projectStatus').value;
       const description = document.getElementById('projectDescription').value.trim();
 
@@ -2254,6 +2268,7 @@
         project.area = area;
         project.stages = stages;
         project.stageRates = stageRates;
+        project.fallbackStage = fallbackStage;
         project.status = status;
         project.description = description;
         project.updatedAt = now;
@@ -2266,6 +2281,7 @@
           area,
           stages,
           stageRates,
+          fallbackStage,
           status,
           description,
           createdAt: now,
@@ -3046,8 +3062,23 @@
       const hash = payloadHash(buildSyncPayload());
       if (hash === syncState.lastPushedHash) return;
       if (syncState.pushTimer) clearTimeout(syncState.pushTimer);
-      syncState.pushTimer = setTimeout(() => {
+      syncState.pushTimer = setTimeout(async () => {
         syncState.pushTimer = null;
+        // Перед тем как затирать облако своей версией, проверяем: не появилось ли там
+        // чего-то новее (другой браузер, телефон, ассистент). Молча ничего не теряем.
+        try {
+          const fresh = await fetchRemoteState();
+          const freshAt = fresh && fresh.updatedAt ? Date.parse(fresh.updatedAt) : null;
+          const lastSyncAt = syncState.lastSyncAt ? Date.parse(syncState.lastSyncAt) : null;
+          if (freshAt && lastSyncAt && freshAt > lastSyncAt) {
+            syncState.error = 'В облаке есть более свежие данные (другое устройство или ассистент). '
+              + 'Ваши правки пока только здесь: нажмите «Взять из облака», чтобы принять облачные.';
+            renderSyncPanel();
+            return;
+          }
+        } catch (error) {
+          console.warn('не удалось проверить облако перед отправкой:', error);
+        }
         syncNow({ direction: 'push', silent: true });
       }, SYNC_PUSH_DELAY_MS);
     }
