@@ -2365,11 +2365,27 @@
             syncState.lastResult = 'Взято из облака';
             syncState.lastSyncAt = new Date().toISOString();
           }
+        } else if (direction === 'none' && mode === 'auto') {
+          syncState.lastPushedHash = payloadHash(buildSyncPayload());
+          syncState.lastResult = 'Уже синхронно';
+          syncState.lastSyncAt = new Date().toISOString();
         } else {
           const payload = buildSyncPayload();
+          if (mode === 'auto') {
+            const fresh = await fetchRemoteState();
+            const freshAt = fresh && fresh.updatedAt ? Date.parse(fresh.updatedAt) : null;
+            const mineAt = Date.parse(payload.updatedAt);
+            if (freshAt && (!mineAt || freshAt > mineAt)) {
+              applyRemoteState(fresh);
+              syncState.lastResult = 'Взято из облака';
+              syncState.lastSyncAt = new Date().toISOString();
+              saveSyncConfig();
+              return;
+            }
+          }
           await pushRemoteState(payload);
           syncState.lastPushedHash = payloadHash(payload);
-          syncState.lastResult = direction === 'none' ? 'Уже синхронно' : 'Отправлено в облако';
+          syncState.lastResult = 'Отправлено в облако';
           syncState.lastSyncAt = new Date().toISOString();
         }
         saveSyncConfig();
