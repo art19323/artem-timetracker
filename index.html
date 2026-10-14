@@ -802,7 +802,12 @@
       <div class="card">
         <div class="card-label">Целевая ставка</div>
         <div class="card-value" id="summaryTargetRate">$15/час</div>
-        <div class="card-sub">Ставка зафиксирована</div>
+        <select id="targetRateSelect" title="Ставка за час" style="margin-top: 8px;">
+          <option value="10">$10 / час</option>
+          <option value="15" selected>$15 / час</option>
+          <option value="20">$20 / час</option>
+        </select>
+        <div class="card-sub">По ней считаются бюджет часов и реальная стоимость</div>
       </div>
       <div class="card">
         <div class="card-label">Проекты</div>
@@ -1217,8 +1222,11 @@
         const parsed = JSON.parse(raw);
 
         if (parsed && typeof parsed === 'object') {
-          // Целевая ставка зафиксирована: $15/час (он попросил убрать переключение).
-          state.settings = { targetRate: 15 };
+          state.settings = {
+            targetRate: [10, 15, 20].includes(Number(parsed.settings?.targetRate))
+              ? Number(parsed.settings.targetRate)
+              : 15
+          };
           state.projects = Array.isArray(parsed.projects) ? parsed.projects : [];
           state.tasks = Array.isArray(parsed.tasks) ? parsed.tasks : [];
           state.timeEntries = Array.isArray(parsed.timeEntries) ? parsed.timeEntries : [];
@@ -3312,6 +3320,14 @@
         resetProjectForm();
       });
 
+      document.getElementById('targetRateSelect').addEventListener('change', (event) => {
+        const nextRate = Number(event.target.value);
+        if (![10, 15, 20].includes(nextRate)) return;
+        state.settings.targetRate = nextRate;
+        saveState();
+        renderAll();
+      });
+
       document.getElementById('exportJsonBtn').addEventListener('click', exportJson);
       document.getElementById('importJsonBtn').addEventListener('click', () => {
         document.getElementById('importJsonInput').click();
@@ -3407,6 +3423,8 @@
     function renderAll() {
       ensureSelectedProjectExists();
       ensureSelectedWeekExists();
+      const rateSelect = document.getElementById('targetRateSelect');
+      if (rateSelect) rateSelect.value = String(state.settings.targetRate);
       renderSummary();
       renderCalendarWeek();
       renderProjectList();
