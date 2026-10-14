@@ -2766,11 +2766,14 @@
 
     function validateActiveTimerAfterLoad() {
       if (!state.activeTimer) return;
-      const task = state.tasks.find(item => item.id === state.activeTimer.taskId);
       const project = state.projects.find(item => item.id === state.activeTimer.projectId);
+      const task = state.activeTimer.taskId
+        ? state.tasks.find(item => item.id === state.activeTimer.taskId)
+        : null;
       const startedAtMs = new Date(state.activeTimer.startedAt).getTime();
+      const taskMissing = Boolean(state.activeTimer.taskId) && !task;
 
-      if (!task || !project || Number.isNaN(startedAtMs)) {
+      if (!project || taskMissing || Number.isNaN(startedAtMs)) {
         state.activeTimer = null;
       }
     }
