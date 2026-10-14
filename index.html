@@ -774,7 +774,7 @@
               <input id="projectName" type="text" required maxlength="120" />
             </label>
 
-            <div class="form-grid">
+            <div class="form-grid-3">
               <label>
                 Стоимость проекта, USD
                 <input id="projectPrice" type="number" min="0" step="0.01" value="0" required />
@@ -782,6 +782,10 @@
               <label>
                 Прямые расходы, USD
                 <input id="projectExpenses" type="number" min="0" step="0.01" value="0" required />
+              </label>
+              <label>
+                Площадь, м²
+                <input id="projectArea" type="number" min="0" step="0.1" placeholder="например 56" />
               </label>
             </div>
 
@@ -887,6 +891,20 @@
     function formatMoney(value) {
       const number = Number(value) || 0;
       return '$' + number.toFixed(2);
+    }
+
+    function formatArea(value) {
+      const number = Number(value) || 0;
+      if (!number) return '—';
+      return `${Math.round(number * 100) / 100} м²`;
+    }
+
+    // Стоимость за квадратный метр считается сама: цена проекта ÷ площадь.
+    function formatPricePerM2(price, area) {
+      const amount = Number(price) || 0;
+      const square = Number(area) || 0;
+      if (!square) return '—';
+      return `${formatMoney(amount / square)}/м²`;
     }
 
     function formatHours(value) {
@@ -1408,6 +1426,8 @@
               <div>Ставка: <strong>${effectiveRateHtml}</strong></div>
               <div>Доход: <strong>${formatMoney(metrics.netIncome)}</strong></div>
               <div>Задачи: <strong>${getTasksByProjectId(project.id).length}</strong></div>
+              <div>Площадь: <strong>${formatArea(project.area)}</strong></div>
+              <div>За м²: <strong>${formatPricePerM2(metrics.price, project.area)}</strong></div>
             </div>
           </div>
         `;
@@ -1493,6 +1513,14 @@
             <div class="metric-box">
               <div class="label">Прямые расходы</div>
               <div class="value">${formatMoney(metrics.expenses)}</div>
+            </div>
+            <div class="metric-box">
+              <div class="label">Площадь</div>
+              <div class="value">${formatArea(project.area)}</div>
+            </div>
+            <div class="metric-box">
+              <div class="label">Стоимость за м²</div>
+              <div class="value">${formatPricePerM2(metrics.price, project.area)}</div>
             </div>
             <div class="metric-box">
               <div class="label">Доход после расходов</div>
@@ -1778,6 +1806,7 @@
       document.getElementById('projectId').value = '';
       document.getElementById('projectPrice').value = '0';
       document.getElementById('projectExpenses').value = '0';
+      document.getElementById('projectArea').value = '';
       document.getElementById('projectStatus').value = 'active';
       document.getElementById('projectFormTitle').textContent = 'Новый проект';
     }
@@ -1790,6 +1819,7 @@
       document.getElementById('projectName').value = safeText(project.name);
       document.getElementById('projectPrice').value = Number(project.price) || 0;
       document.getElementById('projectExpenses').value = Number(project.expenses) || 0;
+      document.getElementById('projectArea').value = project.area ? Number(project.area) : '';
       document.getElementById('projectStatus').value = safeText(project.status);
       document.getElementById('projectDescription').value = safeText(project.description || '');
       document.getElementById('projectFormTitle').textContent = 'Редактирование проекта';
@@ -1871,6 +1901,7 @@
       const name = document.getElementById('projectName').value.trim();
       const price = Number(document.getElementById('projectPrice').value);
       const expenses = Number(document.getElementById('projectExpenses').value);
+      const area = Number(document.getElementById('projectArea').value) || 0;
       const status = document.getElementById('projectStatus').value;
       const description = document.getElementById('projectDescription').value.trim();
 
@@ -1879,8 +1910,8 @@
         return;
       }
 
-      if (price < 0 || expenses < 0) {
-        alert('Стоимость и расходы не могут быть отрицательными.');
+      if (price < 0 || expenses < 0 || area < 0) {
+        alert('Стоимость, расходы и площадь не могут быть отрицательными.');
         return;
       }
 
@@ -1893,6 +1924,7 @@
         project.name = name;
         project.price = price;
         project.expenses = expenses;
+        project.area = area;
         project.status = status;
         project.description = description;
         project.updatedAt = now;
@@ -1902,6 +1934,7 @@
           name,
           price,
           expenses,
+          area,
           status,
           description,
           createdAt: now,
