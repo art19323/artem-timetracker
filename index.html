@@ -988,9 +988,22 @@
       return getProjectStages(project).reduce((sum, stage) => sum + getStageRate(project, stage.id) * area, 0);
     }
 
+    // Этап записи: свой, а если его нет — берём этап задачи, к которой запись привязана.
+    // Так часы старых записей попадают в этапы без перезаписи данных.
+    function getEntryStage(entry) {
+      if (!entry) return null;
+      if (entry.stage) return entry.stage;
+      const task = entry.taskId ? state.tasks.find(item => item.id === entry.taskId) : null;
+      return (task && task.stage) || null;
+    }
+
+    function entryStageIsInherited(entry) {
+      return Boolean(entry && !entry.stage && entry.taskId && getEntryStage(entry));
+    }
+
     function projectStageHours(projectId, stageId) {
       return state.timeEntries
-        .filter(entry => entry.projectId === projectId && (entry.stage || null) === stageId)
+        .filter(entry => entry.projectId === projectId && getEntryStage(entry) === stageId)
         .reduce((sum, entry) => sum + calculateEntryHours(entry), 0);
     }
 
@@ -1517,7 +1530,7 @@
       return `
         <div class="calendar-entry">
           <div class="calendar-entry-project">${escapeHtml(project?.name || 'Без проекта')}</div>
-          <div class="calendar-entry-task">${escapeHtml(task ? task.name : 'Без задачи')}${entry.stage ? ' · ' + escapeHtml(stageTitle(entry.stage)) : ''}</div>
+          <div class="calendar-entry-task">${escapeHtml(task ? task.name : 'Без задачи')}${getEntryStage(entry) ? ' · ' + escapeHtml(stageTitle(getEntryStage(entry))) : ''}</div>
           <div class="calendar-entry-meta">
             <div>Начало: ${escapeHtml(formatTimeOnly(entry.startedAt))}</div>
             <div>Длительность: ${formatDuration(entry.durationHours)}</div>
@@ -1929,7 +1942,7 @@
       // часы по проекту, которые не попали ни в один этап — показываем отдельной строкой
       const projectHours = calculateProjectHours(project.id);
       const stageHoursSum = rows.reduce((sum, row) => sum + row.hours, 0);
-      const noStageHours = Math.max(0, projectHours - stageHoursSum);
+      const noStageHours = Math.max(0, projectHours - stageHoursSum);   // ни этапа, ни этапа у задачи
       const noStageRow = noStageHours > 0.0001
         ? `
         <div class="stage-row">
@@ -2012,7 +2025,7 @@
               <div class="log-meta">
                 <span>Дата: <strong>${escapeHtml(formatDateTimeLocal(entry.startedAt))}</strong></span>
                 <span>Задача: <strong>${escapeHtml(task ? task.name : 'Без привязки')}</strong></span>
-                <span>Этап: <strong>${escapeHtml(entry.stage ? stageTitle(entry.stage) : 'без этапа')}</strong></span>
+                <span>Этап: <strong>${escapeHtml(getEntryStage(entry) ? stageTitle(getEntryStage(entry)) : 'без этапа')}${entryStageIsInherited(entry) ? ' (из задачи)' : ''}</strong></span>
               </div>
             </div>
 
