@@ -651,7 +651,7 @@
       <div class="card">
         <div class="card-label">Доход после расходов</div>
         <div class="card-value" id="summaryNetIncome">$0.00</div>
-        <div class="card-sub">Сумма стоимости проектов минус расходы</div>
+        <div class="card-sub" id="summaryNetIncomeSub">Только завершённые проекты</div>
       </div>
       <div class="card">
         <div class="card-label">Средняя эффективная ставка</div>
@@ -664,14 +664,14 @@
         <div class="card-sub" id="summaryActiveTimerSub">Сейчас ничего не отслеживается</div>
       </div>
       <div class="card">
-        <div class="card-label">Часы за выбранную неделю</div>
+        <div class="card-label">Среднее часов за неделю</div>
         <div class="card-value" id="summaryWeekHours">0.00</div>
-        <div class="card-sub" id="summaryWeekHoursSub">Сумма по всем проектам</div>
+        <div class="card-sub" id="summaryWeekHoursSub">По прошедшим неделям с данными</div>
       </div>
       <div class="card">
-        <div class="card-label">Среднее за день</div>
+        <div class="card-label">Среднее за рабочий день</div>
         <div class="card-value" id="summaryWeekAvg">0.00</div>
-        <div class="card-sub">За 5 рабочих дней недели</div>
+        <div class="card-sub" id="summaryWeekAvgSub">Часы недели ÷ 5</div>
       </div>
     </div>
 
@@ -1123,29 +1123,33 @@
       };
     }
 
-    // Среднее по неделям, которые уже закончились: от недели первой записи
-    // до прошлой недели включительно. Недели без записей считаются нулём.
-    function getCompletedWeeksAverage() {
-      if (state.timeEntries.length === 0) return 0;
-      const starts = state.timeEntries
-        .map(entry => getStartOfWeek(new Date(entry.startedAt)).getTime())
-        .filter(value => !Number.isNaN(value));
-      if (starts.length === 0) return 0;
+    // Прошедшие недели с данными: текущая неделя не берётся, недели без часов
+    // (нулевые) в статистику не попадают.
+    function getPastWeeksStats() {
+      const currentWeekStart = getStartOfWeek(new Date()).getTime();
+      const buckets = new Map();
 
-      const firstWeek = new Date(Math.min(...starts));
-      const currentWeek = getStartOfWeek(new Date());
-      const weeks = Math.max(0, Math.round((currentWeek.getTime() - firstWeek.getTime()) / (7 * 24 * 3600000)));
-      if (weeks <= 0) return 0;
+      state.timeEntries.forEach(entry => {
+        const started = new Date(entry.startedAt);
+        if (Number.isNaN(started.getTime())) return;
+        const weekStart = getStartOfWeek(started).getTime();
+        if (weekStart >= currentWeekStart) return;
+        buckets.set(weekStart, (buckets.get(weekStart) || 0) + calculateEntryHours(entry));
+      });
 
-      const completedEnd = currentWeek.getTime();
-      const completedHours = state.timeEntries
-        .filter(entry => {
-          const started = new Date(entry.startedAt).getTime();
-          return started >= firstWeek.getTime() && started < completedEnd;
-        })
-        .reduce((sum, entry) => sum + calculateEntryHours(entry), 0);
+      const weeks = Array.from(buckets.entries())
+        .filter(([, hours]) => hours > 0)
+        .map(([weekStart, hours]) => ({ weekStart, hours }))
+        .sort((a, b) => a.weekStart - b.weekStart);
 
-      return completedHours / weeks;
+      const count = weeks.length;
+      const totalHours = weeks.reduce((sum, week) => sum + week.hours, 0);
+      const avgHoursPerWeek = count > 0 ? (totalHours / count) : null;
+      const avgPerDay = count > 0
+        ? (weeks.reduce((sum, week) => sum + (week.hours / WORK_DAYS_PER_WEEK), 0) / count)
+        : null;
+
+      return { count, totalHours, avgHoursPerWeek, avgPerDay, weeks };
     }
 
     function renderSummary() {
@@ -1157,7 +1161,9 @@
       document.getElementById('summaryProjectsCount').textContent = String(state.projects.length);
       document.getElementById('summaryProjectsSub').textContent = `Активных: ${metrics.activeProjects}`;
       document.getElementById('summaryTotalHours').textContent = formatHours(metrics.totalHours);
-      document.getElementById('summaryNetIncome').textContent = formatMoney(metrics.totalNetIncome);
+      document.getElementById('summaryNetIncome').textContent = formatMoney(metrics.finishedNetIncome);
+      document.getElementById('summaryNetIncomeSub').textContent =
+        `Только завершённые · по всем проектам было бы ${formatMoney(metrics.totalNetIncome)}`;
 
       const effectiveRateElement = document.getElementById('summaryEffectiveRate');
       const effectiveRateSubElement = document.getElementById('summaryEffectiveRateSub');
@@ -1183,10 +1189,29 @@
         activeTimerSubElement.textContent = 'Сейчас ничего не отслеживается';
       }
 
-      document.getElementById('summaryWeekHours').textContent = `${formatHours(weekMetrics.totalWeekHours)} ч`;
-      document.getElementById('summaryWeekAvg').textContent = `${formatHours(weekMetrics.averagePerDay)} ч`;
-      document.getElementById('summaryWeekHoursSub').textContent =
-        `Сумма по всем проектам · в среднем ${formatHours(getCompletedWeeksAverage())} ч за завершённую неделю`;
+      const pastWeeks = getPastWeeksStats();
+      const weekHoursElement = document.getElementById('summaryWeekHours');
+      const weekHoursSubElement = document.getElementById('summaryWeekHoursSub');
+      const weekAvgElement = document.getElementById('summaryWeekAvg');
+      const weekAvgSubElement = document.getElementById('summaryWeekAvgSub');
+
+      if (pastWeeks.count === 0) {
+        weekHoursElement.textContent = 'Нет данных';
+        weekHoursElement.className = 'card-value';
+        weekHoursSubElement.textContent = 'Прошедших недель с данными пока нет';
+        weekAvgElement.textContent = 'Нет данных';
+        weekAvgElement.className = 'card-value';
+        weekAvgSubElement.textContent = 'Прошедших недель с данными пока нет';
+      } else {
+        weekHoursElement.textContent = `${formatHours(pastWeeks.avgHoursPerWeek)} ч`;
+        weekHoursElement.className = 'card-value';
+        weekHoursSubElement.textContent =
+          `${pastWeeks.count} прошедш. недель(и) с данными · всего ${formatHours(pastWeeks.totalHours)} ч, текущая неделя не считается`;
+        weekAvgElement.textContent = `${formatHours(pastWeeks.avgPerDay)} ч`;
+        weekAvgElement.className = 'card-value';
+        weekAvgSubElement.textContent =
+          `Среднее по ${pastWeeks.count} неделям(и): часы каждой недели ÷ 5`;
+      }
       document.getElementById('projectListCount').textContent = String(state.projects.length);
     }
 
@@ -1207,7 +1232,7 @@
       const weekMetrics = getWeekMetrics();
       summaryElement.innerHTML = `
         <div class="calendar-week-pill">Итого за неделю: ${formatHours(weekMetrics.totalWeekHours)} ч</div>
-        <div class="calendar-week-pill">Среднее за день: ${formatHours(weekMetrics.averagePerDay)} ч</div>
+        <div class="calendar-week-pill">Эта неделя: ${formatHours(weekMetrics.averagePerDay)} ч в день (÷ 5)</div>
       `;
 
       const todayKey = toDayKey(new Date());
