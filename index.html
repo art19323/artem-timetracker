@@ -2636,7 +2636,7 @@
     }
 
     // Создаёт задачу из того, что вписали в шапке; по желанию сразу запускает таймер.
-    function createQuickTask(startTimer) {
+    function createQuickTask(startNow) {
       const projectId = document.getElementById('quickProjectSelect')?.value;
       const project = getProjectById(projectId);
       const input = document.getElementById('quickNewTaskInput');
@@ -2669,7 +2669,7 @@
       renderAll();
       const select = document.getElementById('quickTaskSelect');
       if (select) select.value = task.id;
-      if (startTimer) startTimer(task.id, stage);
+      if (startNow) startTimer(task.id, stage);
       return task;
     }
 
