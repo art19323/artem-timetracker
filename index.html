@@ -644,6 +644,55 @@
       margin-top: 8px;
     }
 
+    .stage-table {
+      display: grid;
+      gap: 8px;
+    }
+
+    .stage-row {
+      display: grid;
+      grid-template-columns: 1.6fr 0.8fr 1fr 1fr 1.1fr 1fr;
+      gap: 10px;
+      align-items: center;
+      font-size: 13px;
+    }
+
+    .stage-row > .num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .stage-row .stage-name {
+      color: #dbeafe;
+      font-weight: 600;
+    }
+
+    .stage-row.head {
+      color: var(--muted);
+      font-weight: 600;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .stage-row.total {
+      border-top: 1px solid var(--line);
+      padding-top: 8px;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+
+    @media (max-width: 760px) {
+      .stage-row {
+        grid-template-columns: 1.4fr 1fr 1fr;
+        font-size: 12px;
+      }
+
+      .stage-row .hide-small {
+        display: none;
+      }
+    }
+
     @media (max-width: 1280px) {
       .summary-grid {
         grid-template-columns: repeat(4, 1fr);
@@ -1825,10 +1874,13 @@
       `;
     }
 
-    // Разбивка по этапам: цена за м², сумма, часы и сколько выходит за час.
+    // Разбивка по этапам: ставка за м², сумма по ставке, фактические деньги проекта
+    // (если цена проекта отличается от суммы по ставкам — раскладываем пропорционально),
+    // часы и сколько реально выходит за час работы на каждом этапе.
     function buildStageBreakdownHtml(project) {
       const stages = getProjectStages(project);
       const area = Number(project.area) || 0;
+      const price = Number(project.price) || 0;
 
       if (stages.length === 0) {
         return '<div class="empty">Состав работ не отмечен — отметьте этапы в форме проекта.</div>';
@@ -1836,45 +1888,67 @@
 
       const rows = stages.map(stage => {
         const rate = getStageRate(project, stage.id);
-        const money = rate * area;
+        const planned = rate * area;
         const hours = projectStageHours(project.id, stage.id);
-        return { stage, rate, money, hours, perHour: hours > 0 ? (money / hours) : null };
+        return { stage, rate, planned, hours };
       });
 
-      const total = rows.reduce((sum, row) => sum + row.money, 0);
-      const price = Number(project.price) || 0;
+      const plannedTotal = rows.reduce((sum, row) => sum + row.planned, 0);
+      const hasActual = plannedTotal > 0 && price > 0 && Math.abs(price - plannedTotal) > 0.005;
 
-      const html = rows.map(row => {
-        const share = total > 0 ? (row.money / total) * 100 : 0;
-        const parts = [
-          row.rate ? `${formatMoney(row.rate)}/м²` : 'ставка не задана',
-          formatMoney(row.money),
-          formatDuration(row.hours)
-        ];
-        if (row.perHour !== null) parts.push(`${formatMoney(row.perHour)}/ч`);
-        return `
-          <div class="dist-row">
-            <div class="dist-label">
-              <span>${escapeHtml(row.stage.title)}</span>
-              <span>${escapeHtml(parts.join(' · '))}</span>
-            </div>
-            <div class="bar">
-              <div class="bar-fill" style="width:${share}%"></div>
-            </div>
-          </div>
-        `;
-      }).join('');
+      rows.forEach(row => {
+        // факт: цена проекта, разложенная по этапам пропорционально ставкам
+        row.actual = hasActual
+          ? price * (row.planned / plannedTotal)
+          : (row.planned || 0);
+        row.plannedPerHour = (row.planned > 0 && row.hours > 0) ? (row.planned / row.hours) : null;
+        row.actualPerHour = (row.actual > 0 && row.hours > 0) ? (row.actual / row.hours) : null;
+      });
 
-      let note = 'Ставки по этапам не заданы: впишите цену за м² у нужных этапов в форме проекта.';
-      if (total > 0) {
-        note = `Итого по этапам при ${formatArea(area)}: ${formatMoney(total)}`;
-        if (price > 0) {
-          const diff = total - price;
-          note += ` · цена проекта ${formatMoney(price)} · разница ${diff === 0 ? 'нет' : formatMoney(diff)}`;
-        }
+      const head = `
+        <div class="stage-row head">
+          <span>Этап</span>
+          <span class="num">$/м²</span>
+          <span class="num">По ставке</span>
+          <span class="num">Часы</span>
+          <span class="num hide-small">Факт (по цене проекта)</span>
+          <span class="num">Факт за час</span>
+        </div>`;
+
+      const body = rows.map(row => `
+        <div class="stage-row">
+          <span class="stage-name">${escapeHtml(row.stage.title)}</span>
+          <span class="num">${row.rate ? formatMoney(row.rate) : '—'}</span>
+          <span class="num">${row.planned ? formatMoney(row.planned) : '—'}</span>
+          <span class="num">${formatDuration(row.hours)}</span>
+          <span class="num hide-small">${row.actual ? formatMoney(row.actual) : '—'}</span>
+          <span class="num ${row.actualPerHour !== null ? (row.actualPerHour >= state.settings.targetRate ? 'good' : 'bad') : ''}">${
+            row.actualPerHour !== null ? formatMoney(row.actualPerHour) + '/ч' : 'нет часов'}</span>
+        </div>`).join('');
+
+      const hoursTotal = rows.reduce((sum, row) => sum + row.hours, 0);
+      const actualTotal = rows.reduce((sum, row) => sum + row.actual, 0);
+      const totalRow = `
+        <div class="stage-row total">
+          <span>Итого</span>
+          <span class="num">${plannedTotal ? formatMoney(plannedTotal / (area || 1)) : '—'}</span>
+          <span class="num">${plannedTotal ? formatMoney(plannedTotal) : '—'}</span>
+          <span class="num">${formatDuration(hoursTotal)}</span>
+          <span class="num hide-small">${actualTotal ? formatMoney(actualTotal) : '—'}</span>
+          <span class="num">${hoursTotal > 0 && actualTotal > 0 ? formatMoney(actualTotal / hoursTotal) + '/ч' : '—'}</span>
+        </div>`;
+
+      let note;
+      if (plannedTotal === 0) {
+        note = 'Ставки за м² не заданы: впишите их в форме проекта — тогда появится сумма по каждому этапу и фактическая стоимость часа.';
+      } else if (hasActual) {
+        note = `Цена проекта ${formatMoney(price)} отличается от суммы по ставкам ${formatMoney(plannedTotal)} на ${formatMoney(price - plannedTotal)} — факт разложен по этапам пропорционально ставкам: за час выходит ${formatMoney(actualTotal / (hoursTotal || 1))} при цели $${state.settings.targetRate}/ч.`;
+      } else {
+        note = 'Сумма по ставкам совпадает с ценой проекта — факт за час считается по ставкам.';
       }
 
-      return `<div class="distribution">${html}</div><div class="inline-note" style="margin-top: 10px">${escapeHtml(note)}</div>`;
+      return `<div class="stage-table">${head}${body}${totalRow}</div>
+        <div class="inline-note" style="margin-top: 10px">${escapeHtml(note)}</div>`;
     }
 
     function buildTaskDistributionHtml(projectId, tasks) {
