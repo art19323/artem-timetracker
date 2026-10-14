@@ -719,6 +719,7 @@
         <div class="quick-timer">
           <select id="quickProjectSelect" title="Проект"></select>
           <select id="quickTaskSelect" title="Задача"></select>
+          <select id="quickStageSelect" title="Этап работ"></select>
           <div class="quick-clock" id="quickClock">0:00:00</div>
           <button class="quick-play" id="quickTimerBtn" type="button" title="Запустить таймер">▶</button>
         </div>
@@ -826,14 +827,32 @@
             </label>
 
             <div>
-              <div class="inline-note" style="margin-bottom: 8px;">Состав работ — какие этапы входят в этот проект</div>
-              <label class="check-row"><input type="checkbox" id="stagePlan" /> 1 этап — планировка</label>
-              <div style="height: 6px;"></div>
-              <label class="check-row"><input type="checkbox" id="stageViz" /> 2 этап — визуализация</label>
-              <div style="height: 6px;"></div>
-              <label class="check-row"><input type="checkbox" id="stageDrawings" /> 3 этап — чертежи</label>
-              <div style="height: 6px;"></div>
-              <label class="check-row"><input type="checkbox" id="stageFurniture" /> 4 этап — заказные позиции мебели</label>
+              <div class="inline-note" style="margin-bottom: 8px;">Состав работ — отметь этапы и цену за м² по каждому</div>
+              <label class="check-row">
+                <input type="checkbox" id="stagePlan" />
+                <span style="flex: 1;">1 этап — планировка</span>
+                <input type="number" id="stageRatePlan" min="0" step="0.01" placeholder="$/м²" style="width: 104px;" title="Цена за м² по этапу" />
+              </label>
+              <label class="check-row">
+                <input type="checkbox" id="stageViz" />
+                <span style="flex: 1;">2 этап — визуализация</span>
+                <input type="number" id="stageRateViz" min="0" step="0.01" placeholder="$/м²" style="width: 104px;" title="Цена за м² по этапу" />
+              </label>
+              <label class="check-row">
+                <input type="checkbox" id="stageDrawings" />
+                <span style="flex: 1;">3 этап — чертежи</span>
+                <input type="number" id="stageRateDrawings" min="0" step="0.01" placeholder="$/м²" style="width: 104px;" title="Цена за м² по этапу" />
+              </label>
+              <label class="check-row">
+                <input type="checkbox" id="stageLayouts" />
+                <span style="flex: 1;">4 этап — развертки</span>
+                <input type="number" id="stageRateLayouts" min="0" step="0.01" placeholder="$/м²" style="width: 104px;" title="Цена за м² по этапу" />
+              </label>
+              <label class="check-row">
+                <input type="checkbox" id="stageFurniture" />
+                <span style="flex: 1;">5 этап — заказные позиции мебели</span>
+                <input type="number" id="stageRateFurniture" min="0" step="0.01" placeholder="$/м²" style="width: 104px;" title="Цена за м² по этапу" />
+              </label>
             </div>
 
             <label>
@@ -895,12 +914,42 @@
       { id: 'plan', title: '1 · Планировка' },
       { id: 'viz', title: '2 · Визуализация' },
       { id: 'drawings', title: '3 · Чертежи' },
-      { id: 'furniture', title: '4 · Заказные позиции мебели' }
+      { id: 'layouts', title: '4 · Развертки' },
+      { id: 'furniture', title: '5 · Заказные позиции мебели' }
     ];
 
     function getProjectStages(project) {
       const list = Array.isArray(project && project.stages) ? project.stages : [];
       return PROJECT_STAGES.filter(stage => list.includes(stage.id));
+    }
+
+    function stageTitle(stageId) {
+      const stage = PROJECT_STAGES.find(item => item.id === stageId);
+      return stage ? stage.title : 'Без этапа';
+    }
+
+    // Цена за м² у каждого этапа: project.stageRates = { plan: 12, drawings: 18, ... }
+    function getStageRate(project, stageId) {
+      const rates = (project && project.stageRates) || {};
+      return Number(rates[stageId]) || 0;
+    }
+
+    function projectStageTotal(project) {
+      const area = Number(project && project.area) || 0;
+      return getProjectStages(project).reduce((sum, stage) => sum + getStageRate(project, stage.id) * area, 0);
+    }
+
+    function projectStageHours(projectId, stageId) {
+      return state.timeEntries
+        .filter(entry => entry.projectId === projectId && (entry.stage || null) === stageId)
+        .reduce((sum, entry) => sum + calculateEntryHours(entry), 0);
+    }
+
+    function stageOptionsHtml(project, selectedId) {
+      const options = ['<option value="">Без этапа</option>']
+        .concat(getProjectStages(project).map(stage =>
+          `<option value="${stage.id}"${selectedId === stage.id ? ' selected' : ''}>${escapeHtml(stage.title)}</option>`));
+      return options.join('');
     }
 
     function buildStagePillsHtml(project) {
@@ -1326,9 +1375,10 @@
       if (activeTimer) {
         activeTimerElement.textContent = formatDuration(activeTimer.elapsedHours);
         activeTimerElement.className = 'card-value good';
-        activeTimerSubElement.textContent = activeTimer.task
+        activeTimerSubElement.textContent = (activeTimer.task
           ? `${activeTimer.project.name} → ${activeTimer.task.name}`
-          : `${activeTimer.project.name} · без задачи`;
+          : `${activeTimer.project.name} · без задачи`)
+          + (activeTimer.stage ? ' · ' + stageTitle(activeTimer.stage) : '');
       } else {
         activeTimerElement.textContent = 'Нет';
         activeTimerElement.className = 'card-value';
@@ -1418,7 +1468,7 @@
       return `
         <div class="calendar-entry">
           <div class="calendar-entry-project">${escapeHtml(project?.name || 'Без проекта')}</div>
-          <div class="calendar-entry-task">${escapeHtml(task ? task.name : 'Без задачи')}</div>
+          <div class="calendar-entry-task">${escapeHtml(task ? task.name : 'Без задачи')}${entry.stage ? ' · ' + escapeHtml(stageTitle(entry.stage)) : ''}</div>
           <div class="calendar-entry-meta">
             <div>Начало: ${escapeHtml(formatTimeOnly(entry.startedAt))}</div>
             <div>Длительность: ${formatDuration(entry.durationHours)}</div>
@@ -1488,6 +1538,8 @@
               <div>Задачи: <strong>${getTasksByProjectId(project.id).length}</strong></div>
               <div>Площадь: <strong>${formatArea(project.area)}</strong></div>
               <div>За м²: <strong>${formatPricePerM2(metrics.price, project.area)}</strong></div>
+              <div>По этапам: <strong>${projectStageTotal(project) > 0 ? formatMoney(projectStageTotal(project)) : '—'}</strong></div>
+              <div>Этапов: <strong>${getProjectStages(project).length} из ${PROJECT_STAGES.length}</strong></div>
             </div>
           </div>
         `;
@@ -1612,6 +1664,13 @@
           </div>
         </div>
 
+        <div class="box" style="margin-bottom: 16px;">
+          <div class="box-title">
+            <h3>По этапам</h3>
+          </div>
+          ${buildStageBreakdownHtml(project)}
+        </div>
+
         <div class="grid-two">
           <div class="box">
             <div class="box-title">
@@ -1635,10 +1694,18 @@
                 </label>
               </div>
 
-              <label>
-                Оценка времени, часы (необязательно)
-                <input id="taskEstimateHours" type="number" min="0" step="0.01" placeholder="Например, 3.5" />
-              </label>
+              <div class="form-grid">
+                <label>
+                  Этап работ
+                  <select id="taskStage">
+                    ${stageOptionsHtml(project, null)}
+                  </select>
+                </label>
+                <label>
+                  Оценка времени, часы (необязательно)
+                  <input id="taskEstimateHours" type="number" min="0" step="0.01" placeholder="Например, 3.5" />
+                </label>
+              </div>
 
               <div class="controls">
                 <button class="btn btn-primary" type="submit" id="saveTaskBtn">Сохранить задачу</button>
@@ -1689,6 +1756,13 @@
             </div>
 
             <label>
+              Этап работ
+              <select id="timeEntryStage">
+                ${stageOptionsHtml(project, null)}
+              </select>
+            </label>
+
+            <label>
               Комментарий
               <textarea id="timeEntryComment" placeholder="Краткое описание выполненной работы"></textarea>
             </label>
@@ -1729,6 +1803,7 @@
             <div>
               <div class="task-title">${escapeHtml(task.name)}</div>
               <span class="pill ${statusClass(task.status)}">${escapeHtml(statusLabel(task.status))}</span>
+              ${task.stage ? `<span class="pill">${escapeHtml(stageTitle(task.stage))}</span>` : ''}
               ${activeTimer ? '<div class="active-timer-badge">● Таймер запущен</div>' : ''}
             </div>
 
@@ -1748,6 +1823,58 @@
           </div>
         </div>
       `;
+    }
+
+    // Разбивка по этапам: цена за м², сумма, часы и сколько выходит за час.
+    function buildStageBreakdownHtml(project) {
+      const stages = getProjectStages(project);
+      const area = Number(project.area) || 0;
+
+      if (stages.length === 0) {
+        return '<div class="empty">Состав работ не отмечен — отметьте этапы в форме проекта.</div>';
+      }
+
+      const rows = stages.map(stage => {
+        const rate = getStageRate(project, stage.id);
+        const money = rate * area;
+        const hours = projectStageHours(project.id, stage.id);
+        return { stage, rate, money, hours, perHour: hours > 0 ? (money / hours) : null };
+      });
+
+      const total = rows.reduce((sum, row) => sum + row.money, 0);
+      const price = Number(project.price) || 0;
+
+      const html = rows.map(row => {
+        const share = total > 0 ? (row.money / total) * 100 : 0;
+        const parts = [
+          row.rate ? `${formatMoney(row.rate)}/м²` : 'ставка не задана',
+          formatMoney(row.money),
+          formatDuration(row.hours)
+        ];
+        if (row.perHour !== null) parts.push(`${formatMoney(row.perHour)}/ч`);
+        return `
+          <div class="dist-row">
+            <div class="dist-label">
+              <span>${escapeHtml(row.stage.title)}</span>
+              <span>${escapeHtml(parts.join(' · '))}</span>
+            </div>
+            <div class="bar">
+              <div class="bar-fill" style="width:${share}%"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      let note = 'Ставки по этапам не заданы: впишите цену за м² у нужных этапов в форме проекта.';
+      if (total > 0) {
+        note = `Итого по этапам при ${formatArea(area)}: ${formatMoney(total)}`;
+        if (price > 0) {
+          const diff = total - price;
+          note += ` · цена проекта ${formatMoney(price)} · разница ${diff === 0 ? 'нет' : formatMoney(diff)}`;
+        }
+      }
+
+      return `<div class="distribution">${html}</div><div class="inline-note" style="margin-top: 10px">${escapeHtml(note)}</div>`;
     }
 
     function buildTaskDistributionHtml(projectId, tasks) {
@@ -1795,6 +1922,7 @@
               <div class="log-meta">
                 <span>Дата: <strong>${escapeHtml(formatDateTimeLocal(entry.startedAt))}</strong></span>
                 <span>Задача: <strong>${escapeHtml(task ? task.name : 'Без привязки')}</strong></span>
+                <span>Этап: <strong>${escapeHtml(entry.stage ? stageTitle(entry.stage) : 'без этапа')}</strong></span>
               </div>
             </div>
 
@@ -1870,10 +1998,10 @@
       document.getElementById('projectPrice').value = '0';
       document.getElementById('projectExpenses').value = '0';
       document.getElementById('projectArea').value = '';
-      document.getElementById('stagePlan').checked = false;
-      document.getElementById('stageViz').checked = false;
-      document.getElementById('stageDrawings').checked = false;
-      document.getElementById('stageFurniture').checked = false;
+      ['Plan', 'Viz', 'Drawings', 'Layouts', 'Furniture'].forEach(name => {
+        document.getElementById('stage' + name).checked = false;
+        document.getElementById('stageRate' + name).value = '';
+      });
       document.getElementById('projectStatus').value = 'active';
       document.getElementById('projectFormTitle').textContent = 'Новый проект';
     }
@@ -1888,10 +2016,12 @@
       document.getElementById('projectExpenses').value = Number(project.expenses) || 0;
       document.getElementById('projectArea').value = project.area ? Number(project.area) : '';
       const stages = Array.isArray(project.stages) ? project.stages : [];
-      document.getElementById('stagePlan').checked = stages.includes('plan');
-      document.getElementById('stageViz').checked = stages.includes('viz');
-      document.getElementById('stageDrawings').checked = stages.includes('drawings');
-      document.getElementById('stageFurniture').checked = stages.includes('furniture');
+      PROJECT_STAGES.forEach(stage => {
+        const name = stage.id.charAt(0).toUpperCase() + stage.id.slice(1);
+        document.getElementById('stage' + name).checked = stages.includes(stage.id);
+        const rate = getStageRate(project, stage.id);
+        document.getElementById('stageRate' + name).value = rate ? rate : '';
+      });
       document.getElementById('projectStatus').value = safeText(project.status);
       document.getElementById('projectDescription').value = safeText(project.description || '');
       document.getElementById('projectFormTitle').textContent = 'Редактирование проекта';
@@ -1904,6 +2034,7 @@
       form.reset();
       document.getElementById('taskId').value = '';
       document.getElementById('taskStatus').value = 'active';
+      if (document.getElementById('taskStage')) document.getElementById('taskStage').value = '';
       document.getElementById('taskFormTitle').textContent = 'Задачи проекта';
     }
 
@@ -1923,6 +2054,7 @@
       document.getElementById('taskName').value = safeText(task.name);
       document.getElementById('taskStatus').value = safeText(task.status);
       document.getElementById('taskEstimateHours').value = task.estimateHours ?? '';
+      if (document.getElementById('taskStage')) document.getElementById('taskStage').value = task.stage || '';
       titleElement.textContent = 'Редактирование задачи';
     }
 
@@ -1934,6 +2066,7 @@
       document.getElementById('timeEntryId').value = '';
       document.getElementById('timeEntryStartedAt').value = formatDateInputValue(new Date().toISOString());
       document.getElementById('timeEntryDurationHours').value = '';
+      if (document.getElementById('timeEntryStage')) document.getElementById('timeEntryStage').value = '';
       document.getElementById('timeEntryComment').value = '';
       document.getElementById('timeEntryFormTitle').textContent = 'Журнал времени';
     }
@@ -1955,6 +2088,7 @@
       document.getElementById('timeEntryStartedAt').value = formatDateInputValue(entry.startedAt);
       document.getElementById('timeEntryDurationHours').value = Number(entry.durationHours) || 0;
       document.getElementById('timeEntryTaskId').value = entry.taskId || '';
+      if (document.getElementById('timeEntryStage')) document.getElementById('timeEntryStage').value = entry.stage || '';
       document.getElementById('timeEntryComment').value = safeText(entry.comment || '');
       document.getElementById('timeEntryFormTitle').textContent = 'Редактирование записи времени';
     }
@@ -1974,9 +2108,15 @@
       const price = Number(document.getElementById('projectPrice').value);
       const expenses = Number(document.getElementById('projectExpenses').value);
       const area = Number(document.getElementById('projectArea').value) || 0;
-      const stages = PROJECT_STAGES
-        .filter(stage => Boolean(document.getElementById('stage' + stage.id.charAt(0).toUpperCase() + stage.id.slice(1)).checked))
-        .map(stage => stage.id);
+      const stages = [];
+      const stageRates = {};
+      PROJECT_STAGES.forEach(stage => {
+        const name = stage.id.charAt(0).toUpperCase() + stage.id.slice(1);
+        if (document.getElementById('stage' + name).checked) {
+          stages.push(stage.id);
+          stageRates[stage.id] = Number(document.getElementById('stageRate' + name).value) || 0;
+        }
+      });
       const status = document.getElementById('projectStatus').value;
       const description = document.getElementById('projectDescription').value.trim();
 
@@ -2001,6 +2141,7 @@
         project.expenses = expenses;
         project.area = area;
         project.stages = stages;
+        project.stageRates = stageRates;
         project.status = status;
         project.description = description;
         project.updatedAt = now;
@@ -2012,6 +2153,7 @@
           expenses,
           area,
           stages,
+          stageRates,
           status,
           description,
           createdAt: now,
@@ -2035,6 +2177,7 @@
       const id = document.getElementById('taskId').value.trim();
       const name = document.getElementById('taskName').value.trim();
       const status = document.getElementById('taskStatus').value;
+      const stage = document.getElementById('taskStage')?.value || null;
       const estimateRaw = document.getElementById('taskEstimateHours').value.trim();
       const estimateHours = estimateRaw === '' ? null : Number(estimateRaw);
 
@@ -2056,6 +2199,7 @@
 
         task.name = name;
         task.status = status;
+        task.stage = stage;
         task.estimateHours = estimateHours;
         task.updatedAt = now;
       } else {
@@ -2064,6 +2208,7 @@
           projectId: project.id,
           name,
           status,
+          stage,
           estimateHours,
           createdAt: now,
           updatedAt: now
@@ -2086,6 +2231,7 @@
       const startedAt = document.getElementById('timeEntryStartedAt').value;
       const durationHours = Number(document.getElementById('timeEntryDurationHours').value);
       const taskId = document.getElementById('timeEntryTaskId').value || null;
+      const stage = document.getElementById('timeEntryStage')?.value || null;
       const comment = document.getElementById('timeEntryComment').value.trim();
 
       if (!startedAt) {
@@ -2114,6 +2260,7 @@
 
         entry.projectId = project.id;
         entry.taskId = taskId;
+        entry.stage = stage;
         entry.startedAt = isoStartedAt;
         entry.durationHours = durationHours;
         entry.comment = comment;
@@ -2123,6 +2270,7 @@
           id: generateId('timeEntry'),
           projectId: project.id,
           taskId,
+          stage,
           startedAt: isoStartedAt,
           durationHours,
           comment,
@@ -2220,7 +2368,7 @@
       resetTimeEntryForm();
     }
 
-    function startTimer(taskId) {
+    function startTimer(taskId, stage) {
       const task = state.tasks.find(item => item.id === taskId);
       if (!task) return;
 
@@ -2242,6 +2390,7 @@
       state.activeTimer = {
         projectId: project.id,
         taskId: task.id,
+        stage: stage || task.stage || null,
         startedAt: new Date().toISOString()
       };
 
@@ -2250,7 +2399,7 @@
     }
 
     // Таймер можно вести и без задачи — тогда запись ложится на проект целиком.
-    function startProjectTimer(projectId) {
+    function startProjectTimer(projectId, stage) {
       const project = getProjectById(projectId);
       if (!project) return;
 
@@ -2263,6 +2412,7 @@
       state.activeTimer = {
         projectId: project.id,
         taskId: null,
+        stage: stage || null,
         startedAt: new Date().toISOString()
       };
 
@@ -2285,6 +2435,7 @@
         id: generateId('timeEntry'),
         projectId: timer.projectId,
         taskId: timer.taskId || null,
+        stage: timer.stage || null,
         startedAt: new Date(timer.startedAt).toISOString(),
         durationHours,
         comment: 'Запись создана таймером',
@@ -2360,17 +2511,31 @@
         .map(task => `<option value="${escapeHtml(task.id)}">${escapeHtml(task.name)}</option>`)
         .join('');
       if (wantedTask && tasks.some(task => task.id === wantedTask)) taskSelect.value = wantedTask;
+
+      // Этап работ: список — только этапы выбранного проекта.
+      const stageSelect = document.getElementById('quickStageSelect');
+      if (!stageSelect) return;
+      const wantedStage = timer ? (timer.stage || '') : stageSelect.value;
+      const project = getProjectById(projectId);
+      stageSelect.innerHTML = '<option value="">Без этапа</option>' + (project
+        ? getProjectStages(project).map(stage =>
+            `<option value="${stage.id}">${escapeHtml(stage.title)}</option>`).join('')
+        : '');
+      if (wantedStage && Array.from(stageSelect.options).some(option => option.value === wantedStage)) {
+        stageSelect.value = wantedStage;
+      }
     }
 
     function releaseQuickTimer() {
       const projectId = document.getElementById('quickProjectSelect')?.value;
       const taskId = document.getElementById('quickTaskSelect')?.value || null;
+      const stage = document.getElementById('quickStageSelect')?.value || null;
       if (!getProjectById(projectId)) {
         alert('Сначала выберите проект.');
         return;
       }
-      if (taskId) startTimer(taskId);
-      else startProjectTimer(projectId);
+      if (taskId) startTimer(taskId, stage);
+      else startProjectTimer(projectId, stage);
     }
 
     function toggleQuickTimer() {
@@ -2868,6 +3033,12 @@
       document.getElementById('quickTimerBtn').addEventListener('click', toggleQuickTimer);
       document.getElementById('quickProjectSelect').addEventListener('change', () => {
         renderQuickTimerOptions();
+      });
+      document.getElementById('quickTaskSelect').addEventListener('change', (event) => {
+        // при выборе задачи подставляем её этап, если он задан
+        const task = state.tasks.find(item => item.id === event.target.value);
+        const stageSelect = document.getElementById('quickStageSelect');
+        if (task && task.stage && stageSelect) stageSelect.value = task.stage;
       });
     }
 
