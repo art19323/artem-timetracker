@@ -618,6 +618,32 @@
       border-color: #e11d48;
     }
 
+    input[type="checkbox"] {
+      width: auto;
+      min-width: 18px;
+      height: 18px;
+      accent-color: #38bdf8;
+    }
+
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      color: #dbeafe;
+      padding: 7px 10px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #111827;
+    }
+
+    .stage-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
     @media (max-width: 1280px) {
       .summary-grid {
         grid-template-columns: repeat(4, 1fr);
@@ -799,6 +825,17 @@
               </select>
             </label>
 
+            <div>
+              <div class="inline-note" style="margin-bottom: 8px;">Состав работ — какие этапы входят в этот проект</div>
+              <label class="check-row"><input type="checkbox" id="stagePlan" /> 1 этап — планировка</label>
+              <div style="height: 6px;"></div>
+              <label class="check-row"><input type="checkbox" id="stageViz" /> 2 этап — визуализация</label>
+              <div style="height: 6px;"></div>
+              <label class="check-row"><input type="checkbox" id="stageDrawings" /> 3 этап — чертежи</label>
+              <div style="height: 6px;"></div>
+              <label class="check-row"><input type="checkbox" id="stageFurniture" /> 4 этап — заказные позиции мебели</label>
+            </div>
+
             <label>
               Описание
               <textarea id="projectDescription" placeholder="Краткое описание проекта"></textarea>
@@ -852,6 +889,27 @@
 
   <script>
     const STORAGE_KEY = 'freelanceProjectTracker_v2_calendar';
+
+    // Этапы — его собственная нумерация; в разных проектах разный состав работ.
+    const PROJECT_STAGES = [
+      { id: 'plan', title: '1 · Планировка' },
+      { id: 'viz', title: '2 · Визуализация' },
+      { id: 'drawings', title: '3 · Чертежи' },
+      { id: 'furniture', title: '4 · Заказные позиции мебели' }
+    ];
+
+    function getProjectStages(project) {
+      const list = Array.isArray(project && project.stages) ? project.stages : [];
+      return PROJECT_STAGES.filter(stage => list.includes(stage.id));
+    }
+
+    function buildStagePillsHtml(project) {
+      const stages = getProjectStages(project);
+      if (stages.length === 0) return '';
+      return `<div class="stage-pills">${stages
+        .map(stage => `<span class="pill">${escapeHtml(stage.title)}</span>`)
+        .join('')}</div>`;
+    }
 
     const state = {
       settings: {
@@ -1421,6 +1479,8 @@
               <div class="pill">${formatMoney(project.price || 0)}</div>
             </div>
 
+            ${buildStagePillsHtml(project)}
+
             <div class="project-meta">
               <div>Часы: <strong>${formatDuration(metrics.totalHours)}</strong></div>
               <div>Ставка: <strong>${effectiveRateHtml}</strong></div>
@@ -1492,6 +1552,9 @@
                   : ''}
                 ${state.activeTimer && state.activeTimer.projectId === project.id && !state.activeTimer.taskId
                   ? '<span class="pill status-done">● Таймер запущен по проекту (без задачи)</span>' : ''}
+                ${getProjectStages(project).length
+                  ? `<span class="pill">Этапов: ${getProjectStages(project).length} из ${PROJECT_STAGES.length}</span>`
+                  : '<span class="pill">Состав работ не отмечен</span>'}
                 ${metrics.expensesWarning
                   ? '<span class="pill warn">Расходы выше стоимости проекта</span>'
                   : ''}
@@ -1807,6 +1870,10 @@
       document.getElementById('projectPrice').value = '0';
       document.getElementById('projectExpenses').value = '0';
       document.getElementById('projectArea').value = '';
+      document.getElementById('stagePlan').checked = false;
+      document.getElementById('stageViz').checked = false;
+      document.getElementById('stageDrawings').checked = false;
+      document.getElementById('stageFurniture').checked = false;
       document.getElementById('projectStatus').value = 'active';
       document.getElementById('projectFormTitle').textContent = 'Новый проект';
     }
@@ -1820,6 +1887,11 @@
       document.getElementById('projectPrice').value = Number(project.price) || 0;
       document.getElementById('projectExpenses').value = Number(project.expenses) || 0;
       document.getElementById('projectArea').value = project.area ? Number(project.area) : '';
+      const stages = Array.isArray(project.stages) ? project.stages : [];
+      document.getElementById('stagePlan').checked = stages.includes('plan');
+      document.getElementById('stageViz').checked = stages.includes('viz');
+      document.getElementById('stageDrawings').checked = stages.includes('drawings');
+      document.getElementById('stageFurniture').checked = stages.includes('furniture');
       document.getElementById('projectStatus').value = safeText(project.status);
       document.getElementById('projectDescription').value = safeText(project.description || '');
       document.getElementById('projectFormTitle').textContent = 'Редактирование проекта';
@@ -1902,6 +1974,9 @@
       const price = Number(document.getElementById('projectPrice').value);
       const expenses = Number(document.getElementById('projectExpenses').value);
       const area = Number(document.getElementById('projectArea').value) || 0;
+      const stages = PROJECT_STAGES
+        .filter(stage => Boolean(document.getElementById('stage' + stage.id.charAt(0).toUpperCase() + stage.id.slice(1)).checked))
+        .map(stage => stage.id);
       const status = document.getElementById('projectStatus').value;
       const description = document.getElementById('projectDescription').value.trim();
 
@@ -1925,6 +2000,7 @@
         project.price = price;
         project.expenses = expenses;
         project.area = area;
+        project.stages = stages;
         project.status = status;
         project.description = description;
         project.updatedAt = now;
@@ -1935,6 +2011,7 @@
           price,
           expenses,
           area,
+          stages,
           status,
           description,
           createdAt: now,
