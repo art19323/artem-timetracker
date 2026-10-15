@@ -2801,11 +2801,13 @@
       const projectId = projectSelect.value;
       const tasks = projectId ? getTasksByProjectId(projectId).sort(sortTasksForList) : [];
 
+      // Все пункты собираем ОДНОЙ строкой: `innerHTML +=` пересобирает список и
+      // сбрасывает выбор на первый пункт («Без задачи») — так терялась выбранная задача.
       taskSelect.innerHTML = '<option value="">Без задачи</option>' + tasks
         .map(task => `<option value="${escapeHtml(task.id)}">${escapeHtml(task.name)}</option>`)
-        .join('');
+        .join('')
+        + '<option value="__new__">✏️ Новая задача…</option>';
       if (wantedTask && tasks.some(task => task.id === wantedTask)) taskSelect.value = wantedTask;
-      taskSelect.innerHTML += '<option value="__new__">✏️ Новая задача…</option>';
       if (quickNewTaskMode) taskSelect.value = '__new__';
 
       // Этап работ: список — только этапы выбранного проекта.
