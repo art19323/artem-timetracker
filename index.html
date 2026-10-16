@@ -395,6 +395,34 @@
       gap: 6px;
     }
 
+    /* Заголовок этапа в распределении времени */
+    .dist-stage {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 10px;
+      margin-top: 8px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+      font-size: 13px;
+      font-weight: 600;
+      color: #f8fafc;
+    }
+
+    .dist-stage-hours {
+      color: #93c5fd;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .dist-row-nested {
+      padding-left: 14px;
+    }
+
+    .bar-fill-stage {
+      background: linear-gradient(90deg, #a855f7, #38bdf8);
+    }
+
     .dist-label {
       display: flex;
       justify-content: space-between;
@@ -925,16 +953,20 @@
                 <span style="flex: 1;">1 этап — планировка</span>
                 <input type="number" id="stageRatePlan" min="0" step="0.0001" placeholder="$/м²" style="width: 104px;" title="Цена за м² по этапу" />
               </label>
+
               <label class="check-row">
                 <input type="checkbox" id="stageViz" />
                 <span style="flex: 1;">2 этап — визуализация</span>
                 <input type="number" id="stageRateViz" min="0" step="0.0001" placeholder="$/м²" style="width: 104px;" title="Цена за м² по этапу" />
               </label>
+
               <label class="check-row">
                 <input type="checkbox" id="stageDrawings" />
                 <span style="flex: 1;">3 этап — чертежи</span>
                 <input type="number" id="stageRateDrawings" min="0" step="0.0001" placeholder="$/м²" style="width: 104px;" title="Цена за м² по этапу" />
-              </label>
+              </label>
+
+
               <label class="check-row">
                 <input type="checkbox" id="stageFurniture" />
                 <span style="flex: 1;">4 этап — заказные позиции мебели</span>
@@ -2113,36 +2145,92 @@
 
     function buildTaskDistributionHtml(projectId, tasks) {
       const totalProjectHours = calculateProjectHours(projectId);
+      const entries = state.timeEntries.filter(entry => entry.projectId === projectId);
 
-      if (tasks.length === 0) {
+      if (tasks.length === 0 && entries.length === 0) {
         return '<div class="empty">Нет задач для построения распределения времени.</div>';
       }
 
-      const rows = tasks
-        .map(task => ({
-          task,
-          hours: calculateTaskHours(task.id)
-        }))
-        .sort((a, b) => b.hours - a.hours);
+      // Собираем часы по этапам. Этап записи берётся от самой записи, иначе от её задачи,
+      // иначе от проекта — тем же порядком, что и в журнале (getEntryStage).
+      const groups = new Map();
+      const addHours = (stageId, taskId, name, hours) => {
+        const key = stageId || '__none__';
+        if (!groups.has(key)) groups.set(key, new Map());
+        const bucket = groups.get(key);
+        const rowKey = taskId || '__none__';
+        const row = bucket.get(rowKey) || { name, hours: 0 };
+        row.hours += hours;
+        bucket.set(rowKey, row);
+      };
 
-      return `
-        <div class="distribution">
+      entries.forEach(entry => {
+        const stage = getEntryStage(entry);
+        const task = entry.taskId ? state.tasks.find(item => item.id === entry.taskId) : null;
+        addHours(stage, entry.taskId, task ? task.name : 'Без задачи', Number(entry.durationHours) || 0);
+      });
+
+      // Задачи без времени показываем в их этапе, чтобы список оставался полным.
+      const project = getProjectById(projectId);
+      tasks.forEach(task => {
+        if (calculateTaskHours(task.id) > 0) return;
+        const stage = task.stage ? normalizeStageId(task.stage)
+          : (project && project.fallbackStage ? normalizeStageId(project.fallbackStage) : null);
+        addHours(stage, task.id, task.name, 0);
+      });
+
+      const stageHours = key => {
+        const bucket = groups.get(key || '__none__');
+        if (!bucket) return 0;
+        let sum = 0;
+        bucket.forEach(row => { sum += row.hours; });
+        return sum;
+      };
+
+      const stageBlock = (key, title) => {
+        const hours = stageHours(key);
+        const bucket = groups.get(key || '__none__') || new Map();
+        const rows = [...bucket.entries()]
+          .map(([rowKey, row]) => ({ rowKey, name: row.name, hours: row.hours }))
+          .sort((a, b) => b.hours - a.hours);
+        const pct = totalProjectHours > 0 ? (hours / totalProjectHours) * 100 : 0;
+        return `
+          <div class="dist-stage">
+            <span>${escapeHtml(title)}</span>
+            <span class="dist-stage-hours">${formatDuration(hours)} · ${pct.toFixed(1)}%</span>
+          </div>
+          <div class="bar">
+            <div class="bar-fill bar-fill-stage" style="width:${pct}%"></div>
+          </div>
           ${rows.map(row => {
-            const percentage = totalProjectHours > 0 ? (row.hours / totalProjectHours) * 100 : 0;
+            const rowPct = totalProjectHours > 0 ? (row.hours / totalProjectHours) * 100 : 0;
             return `
-              <div class="dist-row">
+              <div class="dist-row dist-row-nested">
                 <div class="dist-label">
-                  <span>${escapeHtml(row.task.name)}</span>
-                  <span>${formatDuration(row.hours)} · ${percentage.toFixed(1)}%</span>
+                  <span>${escapeHtml(row.name)}</span>
+                  <span>${formatDuration(row.hours)} · ${rowPct.toFixed(1)}%</span>
                 </div>
                 <div class="bar">
-                  <div class="bar-fill" style="width:${percentage}%"></div>
+                  <div class="bar-fill" style="width:${rowPct}%"></div>
                 </div>
               </div>
             `;
           }).join('')}
+        `;
+      };
+
+      let body = '';
+      PROJECT_STAGES.forEach(stage => {
+        if (stageHours(stage.id) > 0) body += stageBlock(stage.id, stage.title);
+      });
+      if (stageHours(null) > 0) body += stageBlock(null, 'Без этапа');
+
+      return `
+        <div class="distribution">
+          ${body}
           ${totalProjectHours === 0 ? '<div class="inline-note">Пока нет записей времени, поэтому все полосы равны 0%.</div>' : ''}
         </div>
+        <div class="inline-note" style="margin-top: 8px;">Всего по проекту: ${formatDuration(totalProjectHours)} · полосы показывают долю от этого времени.</div>
       `;
     }
 
