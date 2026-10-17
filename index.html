@@ -1958,7 +1958,9 @@
                 <select id="timeEntryTaskId">
                   <option value="">Без привязки к задаче</option>
                   ${tasks.map(task => `<option value="${escapeHtml(task.id)}">${escapeHtml(task.name)}</option>`).join('')}
+                  <option value="__new__">✏️ Новая задача…</option>
                 </select>
+                <input id="timeEntryNewTaskInput" type="text" class="hidden" placeholder="Название новой задачи, Enter" maxlength="140" />
               </label>
             </div>
 
@@ -2553,6 +2555,28 @@
       resetTaskForm();
     }
 
+    // Ввод своей задачи прямо в журнале времени
+    function setEntryNewTaskMode(on) {
+      const input = document.getElementById('timeEntryNewTaskInput');
+      if (!input) return;
+      input.classList.toggle('hidden', !on);
+      if (on) { input.value = ''; input.focus(); }
+    }
+
+    document.addEventListener('change', (event) => {
+      if (event.target && event.target.id === 'timeEntryTaskId') {
+        setEntryNewTaskMode(event.target.value === '__new__');
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.target && event.target.id === 'timeEntryNewTaskInput' && event.key === 'Escape') {
+        const select = document.getElementById('timeEntryTaskId');
+        setEntryNewTaskMode(false);
+        if (select) select.value = '';
+      }
+    });
+
     function handleTimeEntrySubmit(event) {
       event.preventDefault();
 
@@ -2562,7 +2586,28 @@
       const id = document.getElementById('timeEntryId').value.trim();
       const startedAt = document.getElementById('timeEntryStartedAt').value;
       const durationHours = Number(document.getElementById('timeEntryDurationHours').value);
-      const taskId = document.getElementById('timeEntryTaskId').value || null;
+      let taskId = document.getElementById('timeEntryTaskId').value || null;
+      if (taskId === '__new__') {
+        const nameInput = document.getElementById('timeEntryNewTaskInput');
+        const newName = (nameInput ? nameInput.value : '').trim();
+        if (!newName) {
+          alert('Впишите название новой задачи.');
+          return;
+        }
+        const nowIso = new Date().toISOString();
+        const createdTask = {
+          id: generateId('task'),
+          projectId: project.id,
+          name: newName,
+          status: 'active',
+          stage: document.getElementById('timeEntryStage')?.value || null,
+          estimateHours: null,
+          createdAt: nowIso,
+          updatedAt: nowIso
+        };
+        state.tasks.push(createdTask);
+        taskId = createdTask.id;
+      }
       const stage = document.getElementById('timeEntryStage')?.value || null;
       const comment = document.getElementById('timeEntryComment').value.trim();
 
