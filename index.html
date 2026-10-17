@@ -466,6 +466,8 @@
       display: none;
     }
 
+    .duration-split { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .duration-split input { width: 100%; }
     .hidden {
       display: none !important;
     }
@@ -1949,9 +1951,12 @@
               </label>
 
               <label>
-                Длительность, часы
-                <input id="timeEntryDurationHours" type="number" min="0" step="0.01" required />
-              </label>
+                  Длительность, часы и минуты
+                  <div class="duration-split">
+                    <input id="timeEntryHours" type="number" min="0" step="1" inputmode="numeric" placeholder="часы" />
+                    <input id="timeEntryMinutes" type="number" min="0" max="59" step="1" inputmode="numeric" placeholder="минуты" />
+                  </div>
+                </label>
 
               <label>
                 Задача
@@ -2396,7 +2401,8 @@
       form.reset();
       document.getElementById('timeEntryId').value = '';
       document.getElementById('timeEntryStartedAt').value = formatDateInputValue(new Date().toISOString());
-      document.getElementById('timeEntryDurationHours').value = '';
+      document.getElementById('timeEntryHours').value = '';
+      document.getElementById('timeEntryMinutes').value = '';
       if (document.getElementById('timeEntryStage')) document.getElementById('timeEntryStage').value = '';
       document.getElementById('timeEntryComment').value = '';
       document.getElementById('timeEntryFormTitle').textContent = 'Журнал времени';
@@ -2417,7 +2423,9 @@
 
       document.getElementById('timeEntryId').value = entry.id;
       document.getElementById('timeEntryStartedAt').value = formatDateInputValue(entry.startedAt);
-      document.getElementById('timeEntryDurationHours').value = Number(entry.durationHours) || 0;
+      const totalMinutes = Math.round((Number(entry.durationHours) || 0) * 60);
+      document.getElementById('timeEntryHours').value = Math.floor(totalMinutes / 60);
+      document.getElementById('timeEntryMinutes').value = totalMinutes % 60;
       document.getElementById('timeEntryTaskId').value = entry.taskId || '';
       if (document.getElementById('timeEntryStage')) document.getElementById('timeEntryStage').value = entry.stage || '';
       document.getElementById('timeEntryComment').value = safeText(entry.comment || '');
@@ -2585,7 +2593,13 @@
 
       const id = document.getElementById('timeEntryId').value.trim();
       const startedAt = document.getElementById('timeEntryStartedAt').value;
-      const durationHours = Number(document.getElementById('timeEntryDurationHours').value);
+      const hoursValue = Number(document.getElementById('timeEntryHours').value || 0);
+      const minutesValue = Number(document.getElementById('timeEntryMinutes').value || 0);
+      if (Number.isNaN(hoursValue) || Number.isNaN(minutesValue) || hoursValue < 0 || minutesValue < 0 || minutesValue > 59) {
+        alert('Часы — целое число, минуты — от 0 до 59.');
+        return;
+      }
+      const durationHours = hoursValue + minutesValue / 60;
       let taskId = document.getElementById('timeEntryTaskId').value || null;
       if (taskId === '__new__') {
         const nameInput = document.getElementById('timeEntryNewTaskInput');
