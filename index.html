@@ -2297,11 +2297,8 @@
       void box.offsetWidth;
       box.classList.add('form-flash');
       window.setTimeout(() => box.classList.remove('form-flash'), 1800);
-      try {
-        form.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      } catch (err) {
-        form.scrollIntoView();
-      }
+      // Прокрутка мгновенная: плавная в части браузеров не срабатывает вовсе
+      form.scrollIntoView({ block: 'center' });
     }
 
     function bindProjectDetailEvents(projectId) {
