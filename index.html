@@ -347,6 +347,21 @@
       background: rgba(17, 24, 39, 0.8);
     }
 
+    .log-item.is-editing,
+    .task-item.is-editing {
+      border-color: #6d2b5f;
+      box-shadow: 0 0 0 2px rgba(109, 43, 95, 0.55);
+    }
+
+    .form-flash {
+      animation: formFlash 1.7s ease-out;
+    }
+
+    @keyframes formFlash {
+      0% { box-shadow: 0 0 0 3px rgba(109, 43, 95, 0.85); }
+      100% { box-shadow: 0 0 0 0 rgba(109, 43, 95, 0); }
+    }
+
     .task-top,
     .log-top {
       display: flex;
@@ -2268,6 +2283,27 @@
       `;
     }
 
+    // Показать форму, в которую ушла правка: без прокрутки кнопка «Изменить»
+    // в журнале выглядит неработающей — форма находится выше по странице.
+    function focusFormForEdit(formId, cardEl) {
+      document.querySelectorAll('.log-item.is-editing, .task-item.is-editing')
+        .forEach(el => el.classList.remove('is-editing'));
+      if (cardEl) cardEl.classList.add('is-editing');
+
+      const form = document.getElementById(formId);
+      if (!form) return;
+      const box = form.closest('.box') || form;
+      box.classList.remove('form-flash');
+      void box.offsetWidth;
+      box.classList.add('form-flash');
+      window.setTimeout(() => box.classList.remove('form-flash'), 1800);
+      try {
+        form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } catch (err) {
+        form.scrollIntoView();
+      }
+    }
+
     function bindProjectDetailEvents(projectId) {
       const taskForm = document.getElementById('taskForm');
       const timeEntryForm = document.getElementById('timeEntryForm');
@@ -2303,6 +2339,7 @@
         button.addEventListener('click', () => {
           state.editingTaskId = button.dataset.taskId;
           fillTaskFormForEdit(state.editingTaskId);
+          focusFormForEdit('taskForm', button.closest('.task-item'));
         });
       });
 
@@ -2314,6 +2351,7 @@
         button.addEventListener('click', () => {
           state.editingTimeEntryId = button.dataset.entryId;
           fillTimeEntryFormForEdit(state.editingTimeEntryId);
+          focusFormForEdit('timeEntryForm', button.closest('.log-item'));
         });
       });
 
