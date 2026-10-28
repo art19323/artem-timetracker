@@ -984,10 +984,21 @@
                 <input type="number" id="stageRateDrawings" min="0" step="0.0001" placeholder="$/м²" style="width: 104px;" title="Цена за м² по этапу" />
               </label>
 
+              <label class="check-row">
+                <input type="checkbox" id="stageRazvertki" />
+                <span style="flex: 1;">4 этап — развёртки</span>
+                <input type="number" id="stageRateRazvertki" min="0" step="0.0001" placeholder="$/м²" style="width: 104px;" title="Цена за м² по этапу" />
+              </label>
+
+              <label class="check-row">
+                <input type="checkbox" id="stageSpecs" />
+                <span style="flex: 1;">5 этап — спецификации</span>
+                <input type="number" id="stageRateSpecs" min="0" step="0.0001" placeholder="$/м²" style="width: 104px;" title="Цена за м² по этапу" />
+              </label>
 
               <label class="check-row">
                 <input type="checkbox" id="stageFurniture" />
-                <span style="flex: 1;">4 этап — заказные позиции мебели</span>
+                <span style="flex: 1;">6 этап — заказные позиции мебели</span>
                 <input type="number" id="stageRateFurniture" min="0" step="0.0001" placeholder="$/м²" style="width: 104px;" title="Цена за м² по этапу" />
               </label>
             </div>
@@ -1051,10 +1062,13 @@
       { id: 'plan', title: '1 · Планировка' },
       { id: 'viz', title: '2 · Визуализация' },
       { id: 'drawings', title: '3 · Чертежи' },
-      { id: 'furniture', title: '4 · Заказные позиции мебели' }
+      { id: 'razvertki', title: '4 · Развёртки' },
+      { id: 'specs', title: '5 · Спецификации' },
+      { id: 'furniture', title: '6 · Заказные позиции мебели' }
     ];
 
-    // Развертки он объединил с чертежами: старые данные с 'layouts' читаем как чертежи.
+    // Старое объединение 'layouts' → 'drawings' оставлено для уже сохранённых данных.
+    // Новые этапы развёрток и спецификаций имеют свои id (razvertki, specs) и не конфликтуют с ним.
     const STAGE_ALIASES = { layouts: 'drawings' };
 
     function normalizeStageId(stageId) {
