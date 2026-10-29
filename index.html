@@ -761,6 +761,79 @@
       }
     }
 
+
+    /* Расходы по датам: строки можно добавлять в любой день, сумма складывается в «Прямые расходы». */
+    .expenses-block {
+      margin: 4px 0 14px 0;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--panel-3);
+    }
+
+    .expense-add-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .expense-add-row input { width: 100%; min-width: 0; }
+
+    .expense-add-row #expenseComment,
+    .expense-add-row #addExpenseBtn { grid-column: 1 / -1; }
+
+    .expense-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .expense-item {
+      display: grid;
+      grid-template-columns: 92px 88px 1fr auto;
+      gap: 8px;
+      align-items: center;
+      font-size: 13px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--panel);
+      color: #dbeafe;
+    }
+
+    .expense-item.head {
+      background: transparent;
+      border: 0;
+      padding: 0 10px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: var(--muted);
+    }
+
+    .expense-item.total {
+      border-style: dashed;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+
+    .expense-amount {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .expense-comment {
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    #projectExpenses[readonly] { opacity: .75; cursor: default; }
+
     @media (max-width: 1280px) {
       .summary-grid {
         grid-template-columns: repeat(4, 1fr);
@@ -816,6 +889,36 @@
 
       .calendar-day {
         min-height: auto;
+      }
+
+      .expense-item {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 10px;
+        font-size: 12px;
+      }
+
+      .expense-item .expense-date {
+        font-weight: 700;
+      }
+
+      .expense-item .expense-amount {
+        margin-left: auto;
+      }
+
+      .expense-item .expense-comment {
+        flex: 1 1 100%;
+        order: 3;
+        white-space: normal;
+      }
+
+      .expense-item button {
+        order: 2;
+      }
+
+      .expense-item.head {
+        display: none;
       }
     }
   </style>
@@ -943,6 +1046,20 @@
                 Площадь, м²
                 <input id="projectArea" type="number" min="0" step="0.1" placeholder="например 56" />
               </label>
+            </div>
+
+            <div class="expenses-block" id="expensesBlock">
+              <div class="inline-note" style="margin-bottom: 8px;">
+                Расходы по датам: материалы, печать, такси, подрядчики — вписывать можно в любой день.
+                Сумма сама складывается в «Прямые расходы».
+              </div>
+              <div class="expense-add-row">
+                <input id="expenseDate" type="date" title="Дата расхода" />
+                <input id="expenseAmount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="сумма, $" />
+                <input id="expenseComment" type="text" maxlength="120" placeholder="на что (необязательно)" />
+                <button class="btn tiny btn-primary" type="button" id="addExpenseBtn">+ Расход</button>
+              </div>
+              <div class="expense-list" id="expenseList"></div>
             </div>
 
             <label>
@@ -1292,6 +1409,22 @@
               : 15
           };
           state.projects = Array.isArray(parsed.projects) ? parsed.projects : [];
+          // Старые суммы одной строкой переносим в список по датам, чтобы форма их не потеряла.
+          state.projects.forEach(project => {
+            if (project && !Array.isArray(project.expenseItems)) {
+              const legacyExpenses = Number(project.expenses) || 0;
+              const created = project.createdAt || new Date().toISOString();
+              project.expenseItems = legacyExpenses > 0
+                ? [{
+                    id: 'expense_legacy_' + Math.random().toString(36).slice(2, 8),
+                    date: String(created).slice(0, 10),
+                    amount: legacyExpenses,
+                    comment: 'прежняя сумма без даты',
+                    createdAt: created
+                  }]
+                : [];
+            }
+          });
           state.tasks = Array.isArray(parsed.tasks) ? parsed.tasks : [];
           state.timeEntries = Array.isArray(parsed.timeEntries) ? parsed.timeEntries : [];
           state.activeTimer = parsed.activeTimer && typeof parsed.activeTimer === 'object'
@@ -1353,10 +1486,38 @@
         .reduce((sum, entry) => sum + calculateEntryHours(entry), 0);
     }
 
+
+    // Расходы проекта заводятся по датам: каждая строка — своя дата, сумма и подпись.
+    // «Прямые расходы» = сумма этих строк; старые данные одной суммой читаются как есть.
+    function getProjectExpenseItems(project) {
+      if (!project || !Array.isArray(project.expenseItems)) return [];
+      return project.expenseItems
+        .filter(item => item && Number(item.amount) > 0)
+        .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    }
+
+    function calculateProjectExpenses(project) {
+      if (!project) return 0;
+      if (!Array.isArray(project.expenseItems)) return Number(project.expenses) || 0;
+      return project.expenseItems.reduce((sum, item) => sum + (Number(item && item.amount) || 0), 0);
+    }
+
+    function todayDateValue() {
+      return formatDateInputValue(new Date().toISOString()).slice(0, 10);
+    }
+
+    function formatExpenseDate(value) {
+      const text = String(value || '');
+      const parts = text.split('-');
+      if (parts.length === 3 && parts[0].length === 4) return `${parts[2]}.${parts[1]}.${parts[0]}`;
+      const date = new Date(text);
+      return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('ru-RU');
+    }
+
     function calculateProjectMetrics(project) {
       const totalHours = calculateProjectHours(project.id);
       const price = Number(project.price) || 0;
-      const expenses = Number(project.expenses) || 0;
+      const expenses = calculateProjectExpenses(project);
       const netIncome = price - expenses;
       const hasHours = totalHours > 0;
       const effectiveRate = hasHours ? (netIncome / totalHours) : null;
@@ -1382,7 +1543,7 @@
     function getOverallMetrics() {
       const totalHours = state.timeEntries.reduce((sum, entry) => sum + calculateEntryHours(entry), 0);
       const totalNetIncome = state.projects.reduce((sum, project) => {
-        return sum + ((Number(project.price) || 0) - (Number(project.expenses) || 0));
+        return sum + ((Number(project.price) || 0) - calculateProjectExpenses(project));
       }, 0);
       const effectiveRate = totalHours > 0 ? (totalNetIncome / totalHours) : null;
       const activeProjects = state.projects.filter(project => project.status === 'active').length;
@@ -1390,7 +1551,7 @@
       const finishedProjects = state.projects.filter(project => project.status === 'done');
       const finishedHours = finishedProjects.reduce((sum, project) => sum + calculateProjectHours(project.id), 0);
       const finishedNetIncome = finishedProjects.reduce((sum, project) => {
-        return sum + ((Number(project.price) || 0) - (Number(project.expenses) || 0));
+        return sum + ((Number(project.price) || 0) - calculateProjectExpenses(project));
       }, 0);
       const finishedRate = finishedHours > 0 ? (finishedNetIncome / finishedHours) : null;
       // факт за м² по завершённым: сколько клиент платит за метр площади
@@ -1909,6 +2070,17 @@
           ${buildStageBreakdownHtml(project)}
         </div>
 
+        <div class="box" style="margin-bottom: 16px;">
+          <div class="box-title">
+            <h3>Расходы по датам</h3>
+            <div class="task-actions">
+              <span class="pill">Всего: ${formatMoney(calculateProjectExpenses(project))}</span>
+              <button class="btn tiny btn-primary" type="button" id="addExpenseJumpBtn">+ Добавить расход</button>
+            </div>
+          </div>
+          ${buildExpenseListHtml(project)}
+        </div>
+
         <div class="grid-two">
           <div class="box">
             <div class="box-title">
@@ -2071,6 +2243,39 @@
     // «По часам» — сколько этап (и проект) должен стоить, чтобы его часы
     // оплачивались по целевой ставке. Делим на площадь: получаем реальную
     // стоимость метра. Рядом — цена из прайса, чтобы видеть недобор или запас.
+
+    // Расходы проекта списком: дата, сумма, на что. Пусто — подсказка, где их вносить.
+    function buildExpenseListHtml(project) {
+      const items = getProjectExpenseItems(project);
+      if (items.length === 0) {
+        return '<div class="empty">Расходов пока нет. Нажмите «+ Добавить расход» — дата, сумма и подпись, и так сколько угодно раз.</div>';
+      }
+      const total = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+      const rows = items.map(item => `
+        <div class="expense-item">
+          <span class="expense-date">${formatExpenseDate(item.date)}</span>
+          <span class="expense-amount">${formatMoney(Number(item.amount) || 0)}</span>
+          <span class="expense-comment">${escapeHtml(item.comment || '')}</span>
+          <span></span>
+        </div>`).join('');
+      return `
+        <div class="expense-list">
+          <div class="expense-item head">
+            <span>Дата</span>
+            <span class="expense-amount">Сумма</span>
+            <span>На что</span>
+            <span></span>
+          </div>
+          ${rows}
+          <div class="expense-item total">
+            <span>Итого</span>
+            <span class="expense-amount">${formatMoney(total)}</span>
+            <span>${items.length} ${items.length === 1 ? 'расход' : (items.length < 5 ? 'расхода' : 'расходов')}</span>
+            <span></span>
+          </div>
+        </div>`;
+    }
+
     function buildStageBreakdownHtml(project) {
       const stages = getProjectStages(project);
       const area = Number(project.area) || 0;
@@ -2327,6 +2532,15 @@
         deleteProject(projectId);
       });
 
+      // Правка расходов живёт в форме проекта: кнопка грузит туда этот проект и ставит курсор на сумму.
+      document.getElementById('addExpenseJumpBtn')?.addEventListener('click', () => {
+        fillProjectFormForEdit(projectId);
+        focusFormForEdit('projectForm', null);
+        const dateEl = document.getElementById('expenseDate');
+        if (dateEl) dateEl.value = todayDateValue();
+        document.getElementById('expenseAmount')?.focus({ preventScroll: true });
+      });
+
       document.getElementById('resetTaskFormBtn')?.addEventListener('click', () => {
         resetTaskForm();
       });
@@ -2371,11 +2585,24 @@
       });
     }
 
+    // Строки расходов, которые сейчас редактируются в форме проекта (ещё не сохранены).
+    let projectFormExpenses = [];
+    let projectFormExpensesHadItems = false;
+
     function resetProjectForm() {
       document.getElementById('projectForm').reset();
       document.getElementById('projectId').value = '';
       document.getElementById('projectPrice').value = '0';
       document.getElementById('projectExpenses').value = '0';
+      projectFormExpenses = [];
+      projectFormExpensesHadItems = false;
+      const expenseDateReset = document.getElementById('expenseDate');
+      if (expenseDateReset) expenseDateReset.value = todayDateValue();
+      const expenseAmountReset = document.getElementById('expenseAmount');
+      if (expenseAmountReset) expenseAmountReset.value = '';
+      const expenseCommentReset = document.getElementById('expenseComment');
+      if (expenseCommentReset) expenseCommentReset.value = '';
+      renderProjectExpenseList();
       document.getElementById('projectArea').value = '';
       document.getElementById('projectFallbackStage').value = '';
       // список этапов берём из PROJECT_STAGES, чтобы он не разъезжался с формой
@@ -2390,6 +2617,80 @@
       document.getElementById('projectFormTitle').textContent = 'Новый проект';
     }
 
+
+    // Живой список расходов в форме проекта: добавление/удаление без перезагрузки страницы.
+    function renderProjectExpenseList() {
+      const listEl = document.getElementById('expenseList');
+      if (!listEl) return;
+      const items = [...projectFormExpenses]
+        .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+      const total = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+
+      listEl.innerHTML = items.length === 0
+        ? '<div class="inline-note">Расходов по датам пока нет — можно вписать одной суммой в поле выше.</div>'
+        : items.map(item => `
+            <div class="expense-item">
+              <span class="expense-date">${formatExpenseDate(item.date)}</span>
+              <span class="expense-amount">${formatMoney(Number(item.amount) || 0)}</span>
+              <span class="expense-comment">${escapeHtml(item.comment || '')}</span>
+              <button class="btn tiny btn-danger" type="button" data-remove-expense="${escapeHtml(item.id || '')}">×</button>
+            </div>`).join('')
+          + `<div class="expense-item total"><span>Итого</span><span class="expense-amount">${formatMoney(total)}</span><span>${items.length} шт.</span><span></span></div>`;
+
+      const totalInput = document.getElementById('projectExpenses');
+      if (totalInput) {
+        if (items.length > 0) {
+          totalInput.value = String(Math.round(total * 100) / 100);
+          totalInput.readOnly = true;
+          totalInput.title = 'Считается по расходам по датам';
+        } else {
+          totalInput.readOnly = false;
+          totalInput.title = '';
+          if (projectFormExpensesHadItems) totalInput.value = '0';
+        }
+      }
+      projectFormExpensesHadItems = items.length > 0;
+    }
+
+    // Добавление расхода из формы: дата по умолчанию — сегодня, можно выбрать любую.
+    function addExpenseFromForm() {
+      const dateEl = document.getElementById('expenseDate');
+      const amountEl = document.getElementById('expenseAmount');
+      const commentEl = document.getElementById('expenseComment');
+      if (!dateEl || !amountEl) return;
+      const amount = Number(String(amountEl.value || '').replace(',', '.'));
+      if (!(amount > 0)) {
+        amountEl.focus();
+        return;
+      }
+      if (!dateEl.value) dateEl.value = todayDateValue();
+      const totalInput = document.getElementById('projectExpenses');
+      // Прежняя сумма «одной строкой» раньше не датирована — переносим её в запись, чтобы не потерять.
+      if (projectFormExpenses.length === 0 && totalInput) {
+        const legacy = Number(totalInput.value) || 0;
+        if (legacy > 0) {
+          projectFormExpenses.push({
+            id: generateId('expense'),
+            date: todayDateValue(),
+            amount: legacy,
+            comment: 'прежняя сумма без даты',
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
+      projectFormExpenses.push({
+        id: generateId('expense'),
+        date: String(dateEl.value).slice(0, 10),
+        amount,
+        comment: (commentEl.value || '').trim(),
+        createdAt: new Date().toISOString()
+      });
+      amountEl.value = '';
+      if (commentEl) commentEl.value = '';
+      renderProjectExpenseList();
+      amountEl.focus({ preventScroll: true });
+    }
+
     function fillProjectFormForEdit(projectId) {
       const project = getProjectById(projectId);
       if (!project) return;
@@ -2397,7 +2698,16 @@
       document.getElementById('projectId').value = project.id;
       document.getElementById('projectName').value = safeText(project.name);
       document.getElementById('projectPrice').value = Number(project.price) || 0;
+      projectFormExpenses = getProjectExpenseItems(project).map(item => ({ ...item }));
+      projectFormExpensesHadItems = false;
       document.getElementById('projectExpenses').value = Number(project.expenses) || 0;
+      renderProjectExpenseList();
+      const expenseDateFill = document.getElementById('expenseDate');
+      if (expenseDateFill) expenseDateFill.value = todayDateValue();
+      const expenseAmountFill = document.getElementById('expenseAmount');
+      if (expenseAmountFill) expenseAmountFill.value = '';
+      const expenseCommentFill = document.getElementById('expenseComment');
+      if (expenseCommentFill) expenseCommentFill.value = '';
       document.getElementById('projectArea').value = project.area ? Number(project.area) : '';
       document.getElementById('projectFallbackStage').value = project.fallbackStage || '';
       const stages = Array.isArray(project.stages) ? project.stages : [];
@@ -2494,7 +2804,18 @@
       const id = document.getElementById('projectId').value.trim();
       const name = document.getElementById('projectName').value.trim();
       const price = Number(document.getElementById('projectPrice').value);
-      const expenses = Number(document.getElementById('projectExpenses').value);
+      const expenseItems = projectFormExpenses
+        .map(item => ({
+          id: item.id || generateId('expense'),
+          date: String(item.date || todayDateValue()).slice(0, 10),
+          amount: Number(item.amount) || 0,
+          comment: String(item.comment || '').trim(),
+          createdAt: item.createdAt || new Date().toISOString()
+        }))
+        .filter(item => item.amount > 0);
+      const expenses = expenseItems.length > 0
+        ? expenseItems.reduce((sum, item) => sum + item.amount, 0)
+        : Math.max(0, Number(document.getElementById('projectExpenses').value) || 0);
       const area = Number(document.getElementById('projectArea').value) || 0;
       const stages = [];
       const stageRates = {};
@@ -2527,6 +2848,7 @@
 
         project.name = name;
         project.price = price;
+        project.expenseItems = expenseItems;
         project.expenses = expenses;
         project.area = area;
         project.stages = stages;
@@ -2541,6 +2863,7 @@
           name,
           price,
           expenses,
+          expenseItems,
           area,
           stages,
           stageRates,
@@ -3517,6 +3840,21 @@
 
       document.getElementById('resetProjectFormBtn').addEventListener('click', () => {
         resetProjectForm();
+      });
+
+      document.getElementById('addExpenseBtn')?.addEventListener('click', addExpenseFromForm);
+      document.getElementById('expenseAmount')?.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          addExpenseFromForm();
+        }
+      });
+      document.getElementById('expenseList')?.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-remove-expense]');
+        if (!button) return;
+        projectFormExpenses = projectFormExpenses
+          .filter(item => String(item.id || '') !== button.dataset.removeExpense);
+        renderProjectExpenseList();
       });
 
       document.getElementById('targetRateSelect').addEventListener('change', (event) => {
