@@ -708,7 +708,7 @@
 
     .stage-row {
       display: grid;
-      grid-template-columns: 1.5fr 0.85fr 0.95fr 0.95fr 0.95fr 0.9fr 0.9fr;
+      grid-template-columns: 1.5fr 0.85fr 0.95fr 0.95fr 0.95fr 0.9fr 1.05fr 0.9fr;
       gap: 9px;
       align-items: center;
       font-size: 13px;
@@ -747,8 +747,8 @@
       }
 
       .stage-row {
-        grid-template-columns: 1.25fr 0.8fr 0.9fr 0.95fr 0.9fr 0.9fr 0.9fr;
-        min-width: 640px;
+        grid-template-columns: 1.25fr 0.8fr 0.9fr 0.95fr 0.9fr 0.9fr 1fr 0.9fr;
+        min-width: 730px;
         font-size: 12px;
       }
 
@@ -2296,10 +2296,15 @@
       const plannedTotal = rows.reduce((sum, row) => sum + row.planned, 0);
       const hasActual = plannedTotal > 0 && price > 0 && Math.abs(price - plannedTotal) > 0.005;
 
+      const expenses = calculateProjectExpenses(project);
+      const netFactor = price > 0 ? Math.max(0, (price - expenses) / price) : 1;
+
       rows.forEach(row => {
         row.pricePart = hasActual
           ? price * (row.planned / plannedTotal)
           : (row.planned || 0);
+        row.netPart = row.pricePart * netFactor;
+        row.effRate = row.hours > 0 ? (row.netPart / row.hours) : null;
         row.realPerM2 = area > 0 ? (row.realCost / area) : null;
         row.pricePerM2 = area > 0 ? (row.pricePart / area) : null;
         row.delta = row.pricePart - row.realCost;
@@ -2315,6 +2320,7 @@
           <span class="num">Реально $/м²</span>
           <span class="num">Цена этапа</span>
           <span class="num">Цена $/м²</span>
+          <span class="num">Эффективная ставка $/ч</span>
           <span class="num">Дельта</span>
         </div>`;
 
@@ -2328,6 +2334,8 @@
           <span class="num">${row.realPerM2 !== null && row.realCost ? formatMoney(row.realPerM2) : '—'}</span>
           <span class="num">${row.pricePart ? formatMoney(row.pricePart) : '—'}</span>
           <span class="num">${row.pricePerM2 ? formatMoney(row.pricePerM2) : '—'}</span>
+          <span class="num ${row.effRate !== null ? (row.effRate >= targetRate ? 'good' : 'bad') : ''}">${
+            row.effRate !== null ? formatMoney(row.effRate) + '/ч' : '—'}</span>
           <span class="num ${deltaClass}">${row.hours > 0 ? formatMoney(row.delta) : '—'}</span>
         </div>`;
       }).join('');
@@ -2345,6 +2353,7 @@
           <span class="num">—</span>
           <span class="num">—</span>
           <span class="num">—</span>
+          <span class="num">—</span>
         </div>`
         : '';
 
@@ -2359,6 +2368,8 @@
           <span class="num">${realPerM2Total !== null ? formatMoney(realPerM2Total) : '—'}</span>
           <span class="num">${price ? formatMoney(price) : '—'}</span>
           <span class="num">${pricePerM2Total ? formatMoney(pricePerM2Total) : '—'}</span>
+          <span class="num ${projectHours > 0 ? ((price - expenses) / projectHours >= targetRate ? 'good' : 'bad') : ''}">${
+            projectHours > 0 ? formatMoney((price - expenses) / projectHours) + '/ч' : '—'}</span>
           <span class="num ${projectHours > 0 ? (price - realTotal >= 0 ? 'good' : 'bad') : ''}">${
             projectHours > 0 ? formatMoney(price - realTotal) : '—'}</span>
         </div>`;
@@ -2367,7 +2378,7 @@
       if (projectHours <= 0) {
         note = 'По проекту ещё нет записей времени — считать нечего.';
       } else {
-        const perHour = price / projectHours;
+        const perHour = (price - expenses) / projectHours;
         note = `По твоим часам проект должен стоить ${formatMoney(realTotal)} → ${formatMoney(realM2(realTotal, area))}/м² `
           + `(при цели $${targetRate}/ч). Ты продаёшь за ${price ? formatMoney(price) : '—'}`
           + `${price && pricePerM2Total ? ' → ' + formatMoney(pricePerM2Total) + '/м²' : ''}. `
@@ -2377,7 +2388,7 @@
       }
 
       return `<div class="stage-table">${head}${body}${noStageRow}${totalRow}</div>
-        <div class="inline-note mobile-hint" style="margin-top: 6px;">Таблицу можно прокрутить вбок — все семь колонок сохраняются.</div>
+        <div class="inline-note mobile-hint" style="margin-top: 6px;">Таблицу можно прокрутить вбок — все восемь колонок сохраняются.</div>
         <div class="inline-note" style="margin-top: 10px">${escapeHtml(note)}</div>`;
     }
 
