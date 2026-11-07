@@ -708,7 +708,9 @@
 
     .stage-row {
       display: grid;
-      grid-template-columns: 1.5fr 0.85fr 0.95fr 0.95fr 0.95fr 0.9fr 1.05fr 0.9fr;
+      grid-template-columns:
+        minmax(0, 1.5fr) minmax(0, 0.85fr) minmax(0, 0.95fr) minmax(0, 0.95fr)
+        minmax(0, 0.95fr) minmax(0, 0.9fr) minmax(0, 1.2fr) minmax(0, 0.9fr);
       gap: 9px;
       align-items: center;
       font-size: 13px;
@@ -720,6 +722,15 @@
       white-space: nowrap;
     }
 
+    /* Заголовки могут не влезать в свою колонку — переносим их, а не сдвигаем сетку. */
+    .stage-row.head > .num {
+      white-space: normal;
+      line-height: 1.2;
+      overflow-wrap: break-word;
+    }
+
+    .stage-row .nw { white-space: nowrap; }
+
     .stage-row .stage-name {
       color: #dbeafe;
       font-weight: 600;
@@ -728,6 +739,7 @@
     .stage-row.head {
       color: var(--muted);
       font-weight: 600;
+      font-size: 12px;
       padding-bottom: 6px;
       border-bottom: 1px solid var(--line);
     }
@@ -747,7 +759,9 @@
       }
 
       .stage-row {
-        grid-template-columns: 1.25fr 0.8fr 0.9fr 0.95fr 0.9fr 0.9fr 1fr 0.9fr;
+        grid-template-columns:
+          minmax(0, 1.25fr) minmax(0, 0.8fr) minmax(0, 0.9fr) minmax(0, 0.95fr)
+          minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 1.1fr) minmax(0, 0.9fr);
         min-width: 730px;
         font-size: 12px;
       }
@@ -2317,10 +2331,10 @@
           <span>Этап</span>
           <span class="num">Часы</span>
           <span class="num">Стоит по часам</span>
-          <span class="num">Реально $/м²</span>
+          <span class="num">Реально <span class="nw">$/м²</span></span>
           <span class="num">Цена этапа</span>
-          <span class="num">Цена $/м²</span>
-          <span class="num">Эффективная ставка $/ч</span>
+          <span class="num">Цена <span class="nw">$/м²</span></span>
+          <span class="num">Эффективная ставка <span class="nw">$/ч</span></span>
           <span class="num">Дельта</span>
         </div>`;
 
