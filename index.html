@@ -710,7 +710,7 @@
       display: grid;
       grid-template-columns:
         minmax(0, 1.5fr) minmax(0, 0.85fr) minmax(0, 0.95fr) minmax(0, 0.95fr)
-        minmax(0, 0.95fr) minmax(0, 0.9fr) minmax(0, 1.2fr) minmax(0, 0.9fr);
+        minmax(0, 0.95fr) minmax(0, 0.9fr) minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 1.0fr);
       gap: 9px;
       align-items: center;
       font-size: 13px;
@@ -761,8 +761,8 @@
       .stage-row {
         grid-template-columns:
           minmax(0, 1.25fr) minmax(0, 0.8fr) minmax(0, 0.9fr) minmax(0, 0.95fr)
-          minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 1.1fr) minmax(0, 0.9fr);
-        min-width: 730px;
+          minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 1.1fr) minmax(0, 0.9fr) minmax(0, 1.05fr);
+        min-width:  840px;
         font-size: 12px;
       }
 
@@ -2324,6 +2324,12 @@
         row.delta = row.pricePart - row.realCost;
         row.realPerHour = row.hours > 0 ? (row.realCost / row.hours) : null;
         row.pricePerHour = row.hours > 0 ? (row.pricePart / row.hours) : null;
+
+        // Бюджет часов этапа при целевой ставке и остаток до него (может быть отрицательным).
+
+        row.budgetHours = targetRate > 0 ? (row.netPart / targetRate) : null;
+
+        row.hoursLeft = row.budgetHours !== null && row.pricePart > 0 ? (row.budgetHours - row.hours) : null;
       });
 
       const head = `
@@ -2335,6 +2341,7 @@
           <span class="num">Цена этапа</span>
           <span class="num">Цена <span class="nw">$/м²</span></span>
           <span class="num">Эффективная ставка <span class="nw">$/ч</span></span>
+          <span class="num">Можно ещё, ч</span>
           <span class="num">Дельта</span>
         </div>`;
 
@@ -2350,6 +2357,10 @@
           <span class="num">${row.pricePerM2 ? formatMoney(row.pricePerM2) : '—'}</span>
           <span class="num ${row.effRate !== null ? (row.effRate >= targetRate ? 'good' : 'bad') : ''}">${
             row.effRate !== null ? formatMoney(row.effRate) + '/ч' : '—'}</span>
+          <span class="num ${row.hoursLeft !== null ? (row.hoursLeft >= 0 ? 'good' : 'bad') : ''}">${
+            row.hoursLeft === null ? '—'
+              : row.hoursLeft >= 0 ? formatDuration(row.hoursLeft)
+              : '−' + formatDuration(-row.hoursLeft)}</span>
           <span class="num ${deltaClass}">${row.hours > 0 ? formatMoney(row.delta) : '—'}</span>
         </div>`;
       }).join('');
@@ -2368,12 +2379,19 @@
           <span class="num">—</span>
           <span class="num">—</span>
           <span class="num">—</span>
+          <span class="num">—</span>
         </div>`
         : '';
 
       const realTotal = projectHours * targetRate;
       const realPerM2Total = area > 0 ? (realTotal / area) : null;
       const pricePerM2Total = area > 0 ? (price / area) : null;
+
+      const netTotal = price - expenses;
+
+      const budgetHoursTotal = targetRate > 0 ? (netTotal / targetRate) : null;
+
+      const hoursLeftTotal = budgetHoursTotal !== null ? (budgetHoursTotal - projectHours) : null;
       const totalRow = `
         <div class="stage-row total">
           <span>Итого</span>
@@ -2384,6 +2402,10 @@
           <span class="num">${pricePerM2Total ? formatMoney(pricePerM2Total) : '—'}</span>
           <span class="num ${projectHours > 0 ? ((price - expenses) / projectHours >= targetRate ? 'good' : 'bad') : ''}">${
             projectHours > 0 ? formatMoney((price - expenses) / projectHours) + '/ч' : '—'}</span>
+          <span class="num ${hoursLeftTotal !== null ? (hoursLeftTotal >= 0 ? 'good' : 'bad') : ''}">${
+            hoursLeftTotal === null ? '—'
+              : hoursLeftTotal >= 0 ? formatDuration(hoursLeftTotal)
+              : '−' + formatDuration(-hoursLeftTotal)}</span>
           <span class="num ${projectHours > 0 ? (price - realTotal >= 0 ? 'good' : 'bad') : ''}">${
             projectHours > 0 ? formatMoney(price - realTotal) : '—'}</span>
         </div>`;
@@ -2398,11 +2420,17 @@
           + `${price && pricePerM2Total ? ' → ' + formatMoney(pricePerM2Total) + '/м²' : ''}. `
           + `Фактически выходит ${formatMoney(perHour)}/ч: `
           + (price - realTotal >= 0 ? `запас ${formatMoney(price - realTotal)}.`
-                                    : `недобор ${formatMoney(realTotal - price)}.`);
+                                    : `недобор ${formatMoney(realTotal - price)}.`)
+          + (budgetHoursTotal === null || budgetHoursTotal <= 0 ? ''
+              : hoursLeftTotal >= 0
+                ? ` Хватит на ${formatDuration(budgetHoursTotal).replace(' 0 мин', '')} при $${targetRate}/ч — `
+                  + `можно отработать ещё ${formatDuration(hoursLeftTotal)}.`
+                : ` Бюджет $${targetRate}/ч исчерпан: перебор ${formatDuration(-hoursLeftTotal)} — `
+                  + `чтобы выйти на $${targetRate}/ч, цена должна быть ${formatMoney(projectHours * targetRate + expenses)}.`);
       }
 
       return `<div class="stage-table">${head}${body}${noStageRow}${totalRow}</div>
-        <div class="inline-note mobile-hint" style="margin-top: 6px;">Таблицу можно прокрутить вбок — все восемь колонок сохраняются.</div>
+        <div class="inline-note mobile-hint" style="margin-top: 6px;">Таблицу можно прокрутить вбок — все девять колонок сохраняются.</div>
         <div class="inline-note" style="margin-top: 10px">${escapeHtml(note)}</div>`;
     }
 
