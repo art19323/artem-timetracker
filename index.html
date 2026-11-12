@@ -1358,6 +1358,12 @@
       return `${sign}${hours} ч ${minutes} мин`;
     }
 
+    // Часы «сколько ещё можно» — без хвоста «0 мин».
+    function formatHoursLeft(value) {
+      const text = formatDuration(value);
+      return text.replace(/ 0 мин$/, '');
+    }
+
     function formatDateTimeLocal(dateString) {
       if (!dateString) return '—';
       const date = new Date(dateString);
@@ -2359,8 +2365,8 @@
             row.effRate !== null ? formatMoney(row.effRate) + '/ч' : '—'}</span>
           <span class="num ${row.hoursLeft !== null ? (row.hoursLeft >= 0 ? 'good' : 'bad') : ''}">${
             row.hoursLeft === null ? '—'
-              : row.hoursLeft >= 0 ? formatDuration(row.hoursLeft)
-              : '−' + formatDuration(-row.hoursLeft)}</span>
+              : row.hoursLeft >= 0 ? formatHoursLeft(row.hoursLeft)
+              : '−' + formatHoursLeft(-row.hoursLeft)}</span>
           <span class="num ${deltaClass}">${row.hours > 0 ? formatMoney(row.delta) : '—'}</span>
         </div>`;
       }).join('');
@@ -2404,8 +2410,8 @@
             projectHours > 0 ? formatMoney((price - expenses) / projectHours) + '/ч' : '—'}</span>
           <span class="num ${hoursLeftTotal !== null ? (hoursLeftTotal >= 0 ? 'good' : 'bad') : ''}">${
             hoursLeftTotal === null ? '—'
-              : hoursLeftTotal >= 0 ? formatDuration(hoursLeftTotal)
-              : '−' + formatDuration(-hoursLeftTotal)}</span>
+              : hoursLeftTotal >= 0 ? formatHoursLeft(hoursLeftTotal)
+              : '−' + formatHoursLeft(-hoursLeftTotal)}</span>
           <span class="num ${projectHours > 0 ? (price - realTotal >= 0 ? 'good' : 'bad') : ''}">${
             projectHours > 0 ? formatMoney(price - realTotal) : '—'}</span>
         </div>`;
@@ -2423,9 +2429,9 @@
                                     : `недобор ${formatMoney(realTotal - price)}.`)
           + (budgetHoursTotal === null || budgetHoursTotal <= 0 ? ''
               : hoursLeftTotal >= 0
-                ? ` Хватит на ${formatDuration(budgetHoursTotal).replace(' 0 мин', '')} при $${targetRate}/ч — `
-                  + `можно отработать ещё ${formatDuration(hoursLeftTotal)}.`
-                : ` Бюджет $${targetRate}/ч исчерпан: перебор ${formatDuration(-hoursLeftTotal)} — `
+                ? ` Хватит на ${formatHoursLeft(budgetHoursTotal)} при $${targetRate}/ч — `
+                  + `можно отработать ещё ${formatHoursLeft(hoursLeftTotal)}.`
+                : ` Бюджет $${targetRate}/ч исчерпан: перебор ${formatHoursLeft(-hoursLeftTotal)} — `
                   + `чтобы выйти на $${targetRate}/ч, цена должна быть ${formatMoney(projectHours * targetRate + expenses)}.`);
       }
 
