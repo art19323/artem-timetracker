@@ -1032,6 +1032,7 @@
           <span class="muted" id="projectListCount">0</span>
         </div>
         <div class="project-list" id="projectList"></div>
+        <button class="btn btn-primary" id="newProjectBtn" type="button" style="width:100%; margin:10px 0 0;">+ Новый проект</button>
 
 
 
@@ -3899,6 +3900,15 @@
 
       document.getElementById('resetProjectFormBtn').addEventListener('click', () => {
         resetProjectForm();
+      });
+
+      // Явная кнопка «+ Новый проект»: сбрасывает форму из режима редактирования.
+      document.getElementById('newProjectBtn').addEventListener('click', () => {
+        resetProjectForm();
+        const form = document.getElementById('projectForm');
+        if (form) form.scrollIntoView({ block: 'center' });
+        const nameInput = document.getElementById('projectName');
+        if (nameInput) nameInput.focus({ preventScroll: true });
       });
 
       document.getElementById('addExpenseBtn')?.addEventListener('click', addExpenseFromForm);
