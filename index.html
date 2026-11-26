@@ -229,6 +229,101 @@
     .status-done { color: #bbf7d0; border-color: rgba(34,197,94,0.35); }
     .status-archived { color: #cbd5e1; border-color: rgba(148,163,184,0.35); }
 
+    /* Теги работ: чипы в форме задачи, плашки в задачах и журнале, таблица по проекту */
+    .tag-picker {
+      margin-top: 10px;
+      padding: 10px;
+      border: 1px dashed var(--line);
+      border-radius: var(--radius-sm);
+      background: rgba(15, 23, 42, 0.5);
+    }
+
+    .tag-picker-title {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .tag-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .tag-chip {
+      border: 1px solid var(--line);
+      background: #0b1220;
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+
+    .tag-chip.selected {
+      border-color: var(--accent);
+      color: #e0f2fe;
+      background: rgba(56, 189, 248, 0.18);
+    }
+
+    .tag-add-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .tag-add-row input {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .pill.tag-pill {
+      color: #bae6fd;
+      border-color: rgba(56, 189, 248, 0.45);
+      background: rgba(56, 189, 248, 0.12);
+    }
+
+    .tag-table {
+      display: grid;
+      gap: 4px;
+    }
+
+    .tag-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 100px 70px;
+      gap: 10px;
+      align-items: baseline;
+      font-size: 13px;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    }
+
+    .tag-row.head {
+      font-size: 12px;
+      color: var(--muted);
+      border-bottom-color: rgba(148, 163, 184, 0.35);
+    }
+
+    .tag-row.head > .num { white-space: normal; line-height: 1.2; }
+
+    .tag-row.total {
+      font-weight: 600;
+      border-bottom: none;
+      border-top: 1px solid var(--line);
+    }
+
+    .tag-row.muted-row .tag-name { color: var(--muted); }
+
+    .tag-row .num { text-align: right; white-space: nowrap; }
+    .tag-name { color: #e2e8f0; overflow-wrap: anywhere; }
+
+    @media (max-width: 760px) {
+      .tag-add-row { flex-direction: column; }
+      .tag-add-row .btn { width: 100%; }
+      .tag-row { grid-template-columns: minmax(0, 1fr) 84px 58px; }
+    }
+
     .good { color: var(--success); }
     .bad { color: var(--danger); }
     .warn { color: var(--warning); }
@@ -1203,6 +1298,48 @@
     // Новые этапы развёрток и спецификаций имеют свои id (razvertki, specs) и не конфликтуют с ним.
     const STAGE_ALIASES = { layouts: 'drawings' };
 
+    // Теги работ: по ним видно, сколько времени уходит на электрику, отделку и т.д.
+    // Набор можно расширять своими тегами — они лежат в settings.tagOptions.
+    const TAG_PRESETS = ['Электрика', 'Планировка', 'Отделка', 'Сантехника'];
+    const TAG_MAX_LENGTH = 30;
+
+    function normalizeTag(value) {
+      return String(value ?? '').trim().replace(/\s+/g, ' ').slice(0, TAG_MAX_LENGTH);
+    }
+
+    function getTagOptions() {
+      const custom = Array.isArray(state.settings.tagOptions) ? state.settings.tagOptions : [];
+      const list = [...TAG_PRESETS, ...custom.map(normalizeTag).filter(Boolean)];
+      return [...new Set(list)];
+    }
+
+    function getTaskTags(task) {
+      if (!task || !Array.isArray(task.tags)) return [];
+      return task.tags.map(normalizeTag).filter(Boolean);
+    }
+
+    function buildTagPillsHtml(tags) {
+      const list = Array.isArray(tags) ? tags : [];
+      return list.map(tag => `<span class="pill tag-pill">${escapeHtml(tag)}</span>`).join('');
+    }
+
+    // Чипы в форме задачи: клик по чипу включает/выключает тег.
+    function renderTaskTagChips(selected) {
+      const box = document.getElementById('taskTagChips');
+      if (!box) return;
+      const chosen = (Array.isArray(selected) ? selected : []).map(normalizeTag);
+      box.innerHTML = getTagOptions().map(tag => {
+        const on = chosen.includes(tag);
+        return `<button type="button" class="tag-chip${on ? ' selected' : ''}" data-tag="${escapeHtml(tag)}" aria-pressed="${on ? 'true' : 'false'}">${escapeHtml(tag)}</button>`;
+      }).join('');
+    }
+
+    function getSelectedTaskTags() {
+      const box = document.getElementById('taskTagChips');
+      if (!box) return [];
+      return [...box.querySelectorAll('.tag-chip.selected')].map(chip => chip.dataset.tag).filter(Boolean);
+    }
+
     function normalizeStageId(stageId) {
       return STAGE_ALIASES[stageId] || stageId;
     }
@@ -1272,7 +1409,8 @@
 
     const state = {
       settings: {
-        targetRate: 15
+        targetRate: 15,
+        tagOptions: []
       },
       projects: [],
       tasks: [],
@@ -1427,7 +1565,10 @@
           state.settings = {
             targetRate: [10, 15, 20].includes(Number(parsed.settings?.targetRate))
               ? Number(parsed.settings.targetRate)
-              : 15
+              : 15,
+            tagOptions: Array.isArray(parsed.settings?.tagOptions)
+              ? parsed.settings.tagOptions.map(normalizeTag).filter(Boolean).slice(0, 80)
+              : []
           };
           state.projects = Array.isArray(parsed.projects) ? parsed.projects : [];
           // Старые суммы одной строкой переносим в список по датам, чтобы форма их не потеряла.
@@ -1447,6 +1588,9 @@
             }
           });
           state.tasks = Array.isArray(parsed.tasks) ? parsed.tasks : [];
+          state.tasks.forEach(task => {
+            if (task && typeof task === 'object') task.tags = getTaskTags(task);
+          });
           state.timeEntries = Array.isArray(parsed.timeEntries) ? parsed.timeEntries : [];
           state.activeTimer = parsed.activeTimer && typeof parsed.activeTimer === 'object'
             ? parsed.activeTimer
@@ -1875,7 +2019,7 @@
       return `
         <div class="calendar-entry">
           <div class="calendar-entry-project">${escapeHtml(project?.name || 'Без проекта')}</div>
-          <div class="calendar-entry-task">${escapeHtml(task ? task.name : 'Без задачи')}${getEntryStage(entry) ? ' · ' + escapeHtml(stageTitle(getEntryStage(entry))) : ''}</div>
+          <div class="calendar-entry-task">${escapeHtml(task ? task.name : 'Без задачи')}${getEntryStage(entry) ? ' · ' + escapeHtml(stageTitle(getEntryStage(entry))) : ''}${getTaskTags(task).length ? ' · ' + escapeHtml(getTaskTags(task).join(', ')) : ''}</div>
           <div class="calendar-entry-meta">
             <div>Начало: ${escapeHtml(formatTimeOnly(entry.startedAt))}</div>
             <div>Длительность: ${formatDuration(entry.durationHours)}</div>
@@ -2138,6 +2282,15 @@
                 </label>
               </div>
 
+              <div class="tag-picker">
+                <div class="tag-picker-title">Теги работ — можно несколько, по ним считается время</div>
+                <div class="tag-chips" id="taskTagChips"></div>
+                <div class="tag-add-row">
+                  <input id="taskTagNewInput" type="text" maxlength="30" placeholder="Свой тег: шторы, двери…" />
+                  <button class="btn tiny" type="button" id="taskTagAddBtn">+ Тег</button>
+                </div>
+              </div>
+
               <div class="controls">
                 <button class="btn btn-primary" type="submit" id="saveTaskBtn">Сохранить задачу</button>
                 <button class="btn tiny" type="button" id="resetTaskFormBtn">Сбросить</button>
@@ -2157,6 +2310,13 @@
             </div>
             ${distributionHtml}
           </div>
+        </div>
+
+        <div class="box" style="margin-top: 16px;">
+          <div class="box-title">
+            <h3>Время по тегам</h3>
+          </div>
+          ${buildTagBreakdownHtml(project)}
         </div>
 
         <div class="box" style="margin-top: 16px;">
@@ -2240,6 +2400,7 @@
               <div class="task-title">${escapeHtml(task.name)}</div>
               <span class="pill ${statusClass(task.status)}">${escapeHtml(statusLabel(task.status))}</span>
               ${task.stage ? `<span class="pill">${escapeHtml(stageTitle(task.stage))}</span>` : ''}
+              ${getTaskTags(task).length ? buildTagPillsHtml(getTaskTags(task)) : ''}
               ${activeTimer ? '<div class="active-timer-badge">● Таймер запущен</div>' : ''}
             </div>
 
@@ -2445,6 +2606,57 @@
       return area > 0 ? (total / area) : 0;
     }
 
+    // Сколько часов ушло на каждый тег. Задача с несколькими тегами входит в каждый,
+    // поэтому доли могут давать в сумме больше 100% — это подписано под таблицей.
+    function buildTagBreakdownHtml(project) {
+      const entries = state.timeEntries.filter(entry => entry.projectId === project.id);
+      const totalHours = calculateProjectHours(project.id);
+      const byTag = new Map();
+      let noTagHours = 0;
+      let taggedHours = 0;
+
+      entries.forEach(entry => {
+        const hours = Number(entry.durationHours) || 0;
+        const task = entry.taskId ? state.tasks.find(item => item.id === entry.taskId) : null;
+        const tags = getTaskTags(task);
+        if (tags.length === 0) {
+          noTagHours += hours;
+          return;
+        }
+        taggedHours += hours;
+        tags.forEach(tag => byTag.set(tag, (byTag.get(tag) || 0) + hours));
+      });
+
+      const rows = [...byTag.entries()].sort((a, b) => b[1] - a[1]);
+      if (rows.length === 0) {
+        return '<div class="empty">У задач ещё нет тегов. Отметьте теги в форме задачи (Электрика, Планировка, Отделка, Сантехника или свой) — здесь появится, сколько часов ушло на каждую работу.</div>';
+      }
+
+      const pct = hours => totalHours > 0 ? (hours / totalHours) * 100 : 0;
+      const rowHtml = (name, hours, cls) => `
+        <div class="tag-row ${cls}">
+          <span class="tag-name">${escapeHtml(name)}</span>
+          <span class="num">${formatDuration(hours)}</span>
+          <span class="num">${pct(hours).toFixed(1)}%</span>
+        </div>`;
+
+      return `<div class="tag-table">
+          <div class="tag-row head">
+            <span>Тег</span>
+            <span class="num">Часы</span>
+            <span class="num">Доля</span>
+          </div>
+          ${rows.map(([tag, hours]) => rowHtml(tag, hours, '')).join('')}
+          ${noTagHours > 0.0001 ? rowHtml('Без тега', noTagHours, 'muted-row') : ''}
+          <div class="tag-row total">
+            <span>Всего по проекту</span>
+            <span class="num">${formatDuration(totalHours)}</span>
+            <span class="num">100%</span>
+          </div>
+        </div>
+        <div class="inline-note" style="margin-top: 10px;">Часы задач с несколькими тегами входят в каждый тег — поэтому доли могут в сумме давать больше 100%. В задачах с тегами — ${formatDuration(taggedHours)}; остальное — записи с задач без тега или без задачи.</div>`;
+    }
+
     function buildTaskDistributionHtml(projectId, tasks) {
       const totalProjectHours = calculateProjectHours(projectId);
       const entries = state.timeEntries.filter(entry => entry.projectId === projectId);
@@ -2538,6 +2750,7 @@
 
     function buildTimeEntryHtml(entry) {
       const task = entry.taskId ? state.tasks.find(item => item.id === entry.taskId) : null;
+      const entryTags = getTaskTags(task);
       return `
         <div class="log-item">
           <div class="log-top">
@@ -2547,6 +2760,7 @@
                 <span>Дата: <strong>${escapeHtml(formatDateTimeLocal(entry.startedAt))}</strong></span>
                 <span>Задача: <strong>${escapeHtml(task ? task.name : 'Без привязки')}</strong></span>
                 <span>Этап: <strong>${escapeHtml(getEntryStage(entry) ? stageTitle(getEntryStage(entry)) : 'без этапа')}${entryStageIsInherited(entry) ? ' (из задачи)' : ''}</strong></span>
+                ${entryTags.length ? `<span>Теги: <strong>${entryTags.map(tag => escapeHtml(tag)).join(', ')}</strong> (из задачи)</span>` : ''}
               </div>
             </div>
 
@@ -2603,6 +2817,41 @@
 
       document.getElementById('resetTaskFormBtn')?.addEventListener('click', () => {
         resetTaskForm();
+      });
+
+      // Теги: клик по чипу включает/выключает, свой тег добавляется в общий список.
+      const tagChipsBox = document.getElementById('taskTagChips');
+      tagChipsBox?.addEventListener('click', (event) => {
+        const chip = event.target.closest('.tag-chip');
+        if (!chip || !tagChipsBox.contains(chip)) return;
+        chip.classList.toggle('selected');
+        chip.setAttribute('aria-pressed', chip.classList.contains('selected') ? 'true' : 'false');
+      });
+
+      const addTagFromInput = () => {
+        const input = document.getElementById('taskTagNewInput');
+        if (!input) return;
+        const tag = normalizeTag(input.value);
+        if (!tag) return;
+        if (!getTagOptions().includes(tag)) {
+          state.settings.tagOptions = [...(state.settings.tagOptions || []), tag];
+          saveState();
+        }
+        const selected = getSelectedTaskTags();
+        if (!selected.includes(tag)) selected.push(tag);
+        renderTaskTagChips(selected);
+        input.value = '';
+        input.focus();
+      };
+
+      document.getElementById('taskTagAddBtn')?.addEventListener('click', addTagFromInput);
+      document.getElementById('taskTagNewInput')?.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          addTagFromInput();
+        } else if (event.key === 'Escape') {
+          event.target.value = '';
+        }
       });
 
       document.getElementById('resetTimeEntryFormBtn')?.addEventListener('click', () => {
@@ -2790,6 +3039,7 @@
       document.getElementById('taskId').value = '';
       document.getElementById('taskStatus').value = 'active';
       if (document.getElementById('taskStage')) document.getElementById('taskStage').value = '';
+      renderTaskTagChips([]);
       document.getElementById('taskFormTitle').textContent = 'Задачи проекта';
     }
 
@@ -2799,6 +3049,8 @@
 
       if (!taskId) {
         titleElement.textContent = 'Задачи проекта';
+        // чипы являются на новую задачу — иначе форма открывается без тегов
+        renderTaskTagChips([]);
         return;
       }
 
@@ -2810,6 +3062,7 @@
       document.getElementById('taskStatus').value = safeText(task.status);
       document.getElementById('taskEstimateHours').value = task.estimateHours ?? '';
       if (document.getElementById('taskStage')) document.getElementById('taskStage').value = task.stage || '';
+      renderTaskTagChips(getTaskTags(task));
       titleElement.textContent = 'Редактирование задачи';
     }
 
@@ -2952,6 +3205,7 @@
       const name = document.getElementById('taskName').value.trim();
       const status = document.getElementById('taskStatus').value;
       const stage = document.getElementById('taskStage')?.value || null;
+      const tags = getSelectedTaskTags();
       const estimateRaw = document.getElementById('taskEstimateHours').value.trim();
       const estimateHours = estimateRaw === '' ? null : Number(estimateRaw);
 
@@ -2974,6 +3228,7 @@
         task.name = name;
         task.status = status;
         task.stage = stage;
+        task.tags = tags;
         task.estimateHours = estimateHours;
         task.updatedAt = now;
       } else {
@@ -2983,6 +3238,7 @@
           name,
           status,
           stage,
+          tags,
           estimateHours,
           createdAt: now,
           updatedAt: now
