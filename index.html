@@ -771,6 +771,18 @@
       justify-content: center;
     }
 
+    .quick-pause {
+      background: #1e293b;
+      border-color: #475569;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: -1px;
+    }
+
+    .quick-clock.paused {
+      color: #fbbf24;
+    }
+
     .quick-play.running {
       background: #9f1239;
       border-color: #e11d48;
@@ -968,8 +980,17 @@
     }
 
     @media (max-width: 760px) {
+      .quick-timer {
+        flex-wrap: wrap;
+        row-gap: 8px;
+      }
+
       .quick-timer select {
-        max-width: 118px;
+        max-width: 148px;
+      }
+
+      #quickTagSelect {
+        max-width: 132px;
       }
 
       .quick-clock {
@@ -1056,7 +1077,10 @@
           <select id="quickTaskSelect" title="Задача"></select>
           <input id="quickNewTaskInput" type="text" class="hidden" placeholder="Название задачи, Enter" maxlength="140" />
           <select id="quickStageSelect" title="Этап работ"></select>
+          <select id="quickTagSelect" title="Теги задачи"></select>
+          <input id="quickNewTagInput" type="text" class="hidden" placeholder="Новый тег, Enter" maxlength="30" />
           <div class="quick-clock" id="quickClock">0:00:00</div>
+          <button class="quick-play quick-pause hidden" id="quickPauseBtn" type="button" title="Пауза">II</button>
           <button class="quick-play" id="quickTimerBtn" type="button" title="Запустить таймер">▶</button>
         </div>
       </div>
@@ -1326,7 +1350,7 @@
 
     function buildTagPillsHtml(tags) {
       const list = Array.isArray(tags) ? tags : [];
-      return list.map(tag => `<span class="pill tag-pill">${escapeHtml(tag)}</span>`).join('');
+      return list.map(tag => `<span class="pill tag-pill">${escapeHtml(tag)}</span>`).join(' ');
     }
 
     // Чипы в форме задачи: клик по чипу включает/выключает тег.
@@ -1789,6 +1813,17 @@
       };
     }
 
+    // Пауза: accumulatedMs — время до текущего отрезка, segmentStartedAt — начало
+    // текущего отрезка. Старые таймеры (только startedAt) читаются как отрезок без накопленного.
+    function getTimerElapsedHours(timer) {
+      if (!timer) return 0;
+      const accumulated = Math.max(0, Number(timer.accumulatedMs) || 0);
+      if (timer.paused) return accumulated / 3600000;
+      const segmentStart = new Date(timer.segmentStartedAt || timer.startedAt).getTime();
+      if (Number.isNaN(segmentStart)) return accumulated / 3600000;
+      return (accumulated + Math.max(0, Date.now() - segmentStart)) / 3600000;
+    }
+
     function getActiveTimerInfo() {
       if (!state.activeTimer) return null;
       const task = state.activeTimer.taskId
@@ -1797,15 +1832,39 @@
       const project = state.projects.find(item => item.id === state.activeTimer.projectId);
       if (!project) return null;
 
-      const startedAt = new Date(state.activeTimer.startedAt).getTime();
-      const now = Date.now();
-      const elapsedHours = Math.max(0, (now - startedAt) / 3600000);
-
       return {
         task,
         project,
-        elapsedHours
+        elapsedHours: getTimerElapsedHours(state.activeTimer),
+        paused: Boolean(state.activeTimer.paused)
       };
+    }
+
+    function pauseActiveTimer() {
+      const timer = state.activeTimer;
+      if (!timer || timer.paused) return;
+      timer.accumulatedMs = Math.round(getTimerElapsedHours(timer) * 3600000);
+      timer.segmentStartedAt = null;
+      timer.paused = true;
+      timer.pausedAt = new Date().toISOString();
+      saveState();
+      renderAll();
+    }
+
+    function resumeActiveTimer() {
+      const timer = state.activeTimer;
+      if (!timer || !timer.paused) return;
+      timer.paused = false;
+      timer.pausedAt = null;
+      timer.segmentStartedAt = new Date().toISOString();
+      saveState();
+      renderAll();
+    }
+
+    function toggleQuickTimerPause() {
+      if (!state.activeTimer) return;
+      if (state.activeTimer.paused) resumeActiveTimer();
+      else pauseActiveTimer();
     }
 
     function getStartOfWeek(date) {
@@ -1973,7 +2032,8 @@
         activeTimerSubElement.textContent = (activeTimer.task
           ? `${activeTimer.project.name} → ${activeTimer.task.name}`
           : `${activeTimer.project.name} · без задачи`)
-          + (activeTimer.stage ? ' · ' + stageTitle(activeTimer.stage) : '');
+          + (activeTimer.stage ? ' · ' + stageTitle(activeTimer.stage) : '')
+          + (activeTimer.paused ? ' · на паузе' : '');
       } else {
         activeTimerElement.textContent = 'Нет';
         activeTimerElement.className = 'card-value';
@@ -2119,7 +2179,10 @@
                 <div class="project-name">${escapeHtml(project.name)}</div>
                 <span class="pill ${statusClass(project.status)}">${escapeHtml(statusLabel(project.status))}</span>
                 ${state.activeTimer && state.activeTimer.projectId === project.id
-                  ? '<span class="pill status-done">● идёт</span>' : ''}
+                  ? (state.activeTimer.paused
+                      ? '<span class="pill warn">II пауза</span>'
+                      : '<span class="pill status-done">● идёт</span>')
+                  : ''}
               </div>
               <div class="pill">${formatMoney(project.price || 0)}</div>
             </div>
@@ -2445,7 +2508,7 @@
               <span class="pill ${statusClass(task.status)}">${escapeHtml(statusLabel(task.status))}</span>
               ${task.stage ? `<span class="pill">${escapeHtml(stageTitle(task.stage))}</span>` : ''}
               <span class="tag-pills">${getTaskTags(task).length ? buildTagPillsHtml(getTaskTags(task)) : ''}</span>
-              ${activeTimer ? '<div class="active-timer-badge">● Таймер запущен</div>' : ''}
+              ${activeTimer ? `<div class="active-timer-badge">${state.activeTimer.paused ? 'II Таймер на паузе' : '● Таймер запущен'}</div>` : ''}
             </div>
 
             <div class="task-actions">
@@ -3571,11 +3634,15 @@
         stopActiveTimer(true);
       }
 
+      const nowIso = new Date().toISOString();
       state.activeTimer = {
         projectId: project.id,
         taskId: task.id,
         stage: stage || task.stage || null,
-        startedAt: new Date().toISOString()
+        startedAt: nowIso,
+        segmentStartedAt: nowIso,
+        accumulatedMs: 0,
+        paused: false
       };
 
       saveState();
@@ -3593,11 +3660,15 @@
         stopActiveTimer(true);
       }
 
+      const nowIso = new Date().toISOString();
       state.activeTimer = {
         projectId: project.id,
         taskId: null,
         stage: stage || null,
-        startedAt: new Date().toISOString()
+        startedAt: nowIso,
+        segmentStartedAt: nowIso,
+        accumulatedMs: 0,
+        paused: false
       };
 
       saveState();
@@ -3611,9 +3682,8 @@
       }
 
       const timer = state.activeTimer;
-      const startedAtMs = new Date(timer.startedAt).getTime();
-      const endedAtMs = Date.now();
-      const durationHours = Math.max(0, (endedAtMs - startedAtMs) / 3600000);
+      // Пауза не входит в запись: берём отработанное время, а не разницу старт-стоп.
+      const durationHours = getTimerElapsedHours(timer);
 
       state.timeEntries.push({
         id: generateId('timeEntry'),
@@ -3654,19 +3724,32 @@
     function renderQuickTimer() {
       const clock = document.getElementById('quickClock');
       const play = document.getElementById('quickTimerBtn');
+      const pause = document.getElementById('quickPauseBtn');
       if (!clock || !play) return;
 
       const timer = getActiveTimerInfo();
       if (timer) {
         clock.textContent = formatClock(timer.elapsedHours);
+        clock.classList.toggle('paused', timer.paused);
         play.textContent = '■';
         play.className = 'quick-play running';
         play.title = 'Остановить и записать время';
+        if (pause) {
+          pause.classList.remove('hidden');
+          pause.textContent = timer.paused ? '▶' : 'II';
+          pause.className = 'quick-play quick-pause' + (timer.paused ? ' running' : '');
+          pause.title = timer.paused ? 'Продолжить' : 'Пауза (время не идёт)';
+        }
       } else {
         clock.textContent = '0:00:00';
+        clock.classList.remove('paused');
         play.textContent = '▶';
         play.className = 'quick-play';
         play.title = 'Запустить таймер';
+        if (pause) {
+          pause.classList.add('hidden');
+          pause.textContent = 'II';
+        }
       }
     }
 
@@ -3678,9 +3761,12 @@
       select.classList.toggle('hidden', quickNewTaskMode);
       input.classList.toggle('hidden', !quickNewTaskMode);
       if (quickNewTaskMode) {
+        // теги прошлой задачи к новой не относятся
+        quickPendingTags = [];
         input.value = '';
         input.focus();
       }
+      renderQuickTagSelect();
     }
 
     // Создаёт задачу из того, что вписали в шапке; по желанию сразу запускает таймер.
@@ -3707,18 +3793,86 @@
         name,
         status: 'active',
         stage,
+        tags: quickPendingTags.slice(),
         estimateHours: null,
         createdAt: now,
         updatedAt: now
       };
       state.tasks.push(task);
+      // теги применились к новой задаче — очищаем «ожидающие»
+      quickPendingTags = [];
       setQuickNewTaskMode(false);
       saveState();
       renderAll();
       const select = document.getElementById('quickTaskSelect');
       if (select) select.value = task.id;
+      renderQuickTagSelect();
       if (startNow) startTimer(task.id, stage);
       return task;
+    }
+
+    // ---- Теги задачи прямо в шапке: выбрать можно и для новой задачи
+    function getQuickTagTargetTask() {
+      if (quickNewTaskMode) return null;
+      const timer = state.activeTimer;
+      if (timer && timer.taskId) {
+        return state.tasks.find(item => item.id === timer.taskId) || null;
+      }
+      const taskId = document.getElementById('quickTaskSelect')?.value;
+      if (!taskId || taskId === '__new__') return null;
+      return state.tasks.find(item => item.id === taskId) || null;
+    }
+
+    function getQuickSelectedTags() {
+      const task = getQuickTagTargetTask();
+      return task ? getTaskTags(task) : quickPendingTags.slice();
+    }
+
+    function renderQuickTagSelect() {
+      const select = document.getElementById('quickTagSelect');
+      if (!select) return;
+      const tags = getQuickSelectedTags().map(normalizeTag).filter(Boolean);
+      const head = tags.length ? `Теги: ${tags.join(', ')}` : 'Без тега';
+      const options = [`<option value="">${escapeHtml(head)}</option>`];
+      getTagOptions().forEach(tag => {
+        const on = tags.includes(tag);
+        options.push(`<option value="${escapeHtml(tag)}">${on ? '✓ ' : ''}${escapeHtml(tag)}</option>`);
+      });
+      options.push('<option value="__new__">+ Свой тег…</option>');
+      select.innerHTML = options.join('');
+      select.value = '';
+    }
+
+    function toggleQuickTag(tag) {
+      const clean = normalizeTag(tag);
+      if (!clean) return;
+      const task = getQuickTagTargetTask();
+      if (task) {
+        const tags = getTaskTags(task);
+        task.tags = tags.includes(clean) ? tags.filter(item => item !== clean) : [...tags, clean];
+        task.updatedAt = new Date().toISOString();
+        saveState();
+        renderProjectDetails();
+      } else {
+        quickPendingTags = quickPendingTags.includes(clean)
+          ? quickPendingTags.filter(item => item !== clean)
+          : [...quickPendingTags, clean];
+      }
+      renderQuickTagSelect();
+    }
+
+    function setQuickNewTagMode(on) {
+      quickNewTagMode = Boolean(on);
+      const select = document.getElementById('quickTagSelect');
+      const input = document.getElementById('quickNewTagInput');
+      if (!select || !input) return;
+      select.classList.toggle('hidden', quickNewTagMode);
+      input.classList.toggle('hidden', !quickNewTagMode);
+      if (quickNewTagMode) {
+        input.value = '';
+        input.focus();
+      }
+      renderQuickTagSelect();
     }
 
     function renderQuickTimerOptions() {
@@ -3770,6 +3924,8 @@
         taskSelect.classList.toggle('hidden', quickNewTaskMode);
         newInput.classList.toggle('hidden', !quickNewTaskMode);
       }
+
+      renderQuickTagSelect();
     }
 
     function releaseQuickTimer() {
@@ -3839,7 +3995,10 @@
           const nextSettings = {
             targetRate: [10, 15, 20].includes(Number(importedData.settings?.targetRate))
               ? Number(importedData.settings.targetRate)
-              : 15
+              : 15,
+            tagOptions: Array.isArray(importedData.settings?.tagOptions)
+              ? importedData.settings.tagOptions.map(normalizeTag).filter(Boolean).slice(0, 80)
+              : []
           };
 
           const nextProjects = Array.isArray(importedData.projects) ? importedData.projects : null;
@@ -4330,8 +4489,38 @@
       bindSyncEvents();
 
       document.getElementById('quickTimerBtn').addEventListener('click', toggleQuickTimer);
+      document.getElementById('quickPauseBtn').addEventListener('click', toggleQuickTimerPause);
       document.getElementById('quickProjectSelect').addEventListener('change', () => {
+        quickPendingTags = [];
         renderQuickTimerOptions();
+      });
+
+      document.getElementById('quickTagSelect').addEventListener('change', (event) => {
+        const value = event.target.value;
+        if (!value) return;
+        if (value === '__new__') {
+          setQuickNewTagMode(true);
+          return;
+        }
+        toggleQuickTag(value);
+      });
+
+      const quickNewTagInput = document.getElementById('quickNewTagInput');
+      quickNewTagInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          const tag = normalizeTag(quickNewTagInput.value);
+          if (!tag) return;
+          if (!getTagOptions().includes(tag)) {
+            state.settings.tagOptions = [...(state.settings.tagOptions || []), tag];
+            saveState();
+          }
+          setQuickNewTagMode(false);
+          toggleQuickTag(tag);
+          quickNewTagInput.value = '';
+        } else if (event.key === 'Escape') {
+          setQuickNewTagMode(false);
+        }
       });
       document.getElementById('quickTaskSelect').addEventListener('change', (event) => {
         if (event.target.value === '__new__') {
@@ -4340,6 +4529,8 @@
           return;
         }
         // при выборе задачи подставляем её этап, если он задан
+        quickPendingTags = [];
+        renderQuickTagSelect();
         const task = state.tasks.find(item => item.id === event.target.value);
         const stageSelect = document.getElementById('quickStageSelect');
         if (task && task.stage && stageSelect) stageSelect.value = task.stage;
@@ -4373,8 +4564,16 @@
       const task = state.activeTimer.taskId
         ? state.tasks.find(item => item.id === state.activeTimer.taskId)
         : null;
-      const startedAtMs = new Date(state.activeTimer.startedAt).getTime();
-      const taskMissing = Boolean(state.activeTimer.taskId) && !task;
+      // Приводим таймер к новой схеме: старые записи без accumulatedMs/segmentStartedAt
+      // должны продолжать идти, а не сбрасываться.
+      const timer = state.activeTimer;
+      timer.accumulatedMs = Math.max(0, Number(timer.accumulatedMs) || 0);
+      timer.paused = Boolean(timer.paused);
+      if (!timer.startedAt) timer.startedAt = timer.segmentStartedAt || new Date().toISOString();
+      if (!timer.paused && !timer.segmentStartedAt) timer.segmentStartedAt = timer.startedAt;
+
+      const startedAtMs = new Date(timer.startedAt).getTime();
+      const taskMissing = Boolean(timer.taskId) && !task;
 
       if (!project || taskMissing || Number.isNaN(startedAtMs)) {
         state.activeTimer = null;
@@ -4403,6 +4602,8 @@
 
     let summaryTimerInterval = null;
     let quickNewTaskMode = false;        // в шапке пишем новую задачу руками
+    let quickPendingTags = [];           // теги для задачи, которую ещё не создали из шапки
+    let quickNewTagMode = false;         // в шапке вписываем свой тег
     let quickStartAfterCreate = false;   // …и сразу стартуем таймер
 
     function startUiRefreshLoop() {
@@ -4411,7 +4612,7 @@
       }
       summaryTimerInterval = setInterval(() => {
         renderQuickTimer();
-        if (state.activeTimer) {
+        if (state.activeTimer && !state.activeTimer.paused) {
           renderSummary();
         }
       }, 1000);
