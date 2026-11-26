@@ -273,6 +273,12 @@
       margin-top: 8px;
     }
 
+    .tag-inline {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px dashed rgba(148, 163, 184, 0.3);
+    }
+
     .tag-add-row input {
       flex: 1;
       min-width: 0;
@@ -1332,6 +1338,44 @@
         const on = chosen.includes(tag);
         return `<button type="button" class="tag-chip${on ? ' selected' : ''}" data-tag="${escapeHtml(tag)}" aria-pressed="${on ? 'true' : 'false'}">${escapeHtml(tag)}</button>`;
       }).join('');
+    }
+
+    // Теги прямо в карточке задачи: открыл, потыкал чипы — сохранилось сразу,
+    // без похода в форму выше по странице (там он их не находил).
+    function updateTaskTagPills(taskId) {
+      const card = document.querySelector(`.task-item[data-task-id="${taskId}"]`);
+      const task = state.tasks.find(item => item.id === taskId);
+      if (!card || !task) return;
+      const box = card.querySelector('.tag-pills');
+      if (!box) return;
+      const tags = getTaskTags(task);
+      box.innerHTML = tags.length ? buildTagPillsHtml(tags) : '';
+    }
+
+    function toggleTaskTag(taskId, tag) {
+      const task = state.tasks.find(item => item.id === taskId);
+      if (!task) return;
+      const tags = getTaskTags(task);
+      task.tags = tags.includes(tag) ? tags.filter(item => item !== tag) : [...tags, tag];
+      task.updatedAt = new Date().toISOString();
+      saveState();
+      updateTaskTagPills(taskId);
+    }
+
+    function renderInlineTagEditor(editor, task) {
+      const box = editor.querySelector('.tag-chips');
+      if (!box) return;
+      const chosen = getTaskTags(task);
+      box.innerHTML = getTagOptions().map(tag => {
+        const on = chosen.includes(tag);
+        return `<button type="button" class="tag-chip${on ? ' selected' : ''}" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</button>`;
+      }).join('');
+      box.querySelectorAll('.tag-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+          toggleTaskTag(task.id, chip.dataset.tag);
+          renderInlineTagEditor(editor, task);
+        });
+      });
     }
 
     function getSelectedTaskTags() {
@@ -2394,13 +2438,13 @@
         : '—';
 
       return `
-        <div class="task-item">
+        <div class="task-item" data-task-id="${escapeHtml(task.id)}">
           <div class="task-top">
             <div>
               <div class="task-title">${escapeHtml(task.name)}</div>
               <span class="pill ${statusClass(task.status)}">${escapeHtml(statusLabel(task.status))}</span>
               ${task.stage ? `<span class="pill">${escapeHtml(stageTitle(task.stage))}</span>` : ''}
-              ${getTaskTags(task).length ? buildTagPillsHtml(getTaskTags(task)) : ''}
+              <span class="tag-pills">${getTaskTags(task).length ? buildTagPillsHtml(getTaskTags(task)) : ''}</span>
               ${activeTimer ? '<div class="active-timer-badge">● Таймер запущен</div>' : ''}
             </div>
 
@@ -2409,6 +2453,7 @@
                 ? `<button class="btn tiny btn-danger" data-action="stop-timer" data-task-id="${escapeHtml(task.id)}">Остановить</button>`
                 : `<button class="btn tiny btn-success" data-action="start-timer" data-task-id="${escapeHtml(task.id)}">Начать</button>`
               }
+              <button class="btn tiny" type="button" data-action="toggle-task-tags" data-task-id="${escapeHtml(task.id)}">Теги ▾</button>
               <button class="btn tiny" data-action="edit-task" data-task-id="${escapeHtml(task.id)}">Изменить</button>
               <button class="btn tiny btn-danger" data-action="delete-task" data-task-id="${escapeHtml(task.id)}">Удалить</button>
             </div>
@@ -2417,6 +2462,14 @@
           <div class="task-meta">
             <span>Затрачено: <strong>${formatDuration(taskHours)}</strong></span>
             <span>Оценка: <strong>${estimate}</strong></span>
+          </div>
+
+          <div class="tag-inline hidden" data-task-tag-editor="${escapeHtml(task.id)}">
+            <div class="tag-chips"></div>
+            <div class="tag-add-row">
+              <input type="text" class="tag-inline-input" maxlength="30" placeholder="Свой тег: шторы, двери…" />
+              <button class="btn tiny" type="button" data-action="add-task-tag">+ Тег</button>
+            </div>
           </div>
         </div>
       `;
@@ -2879,6 +2932,58 @@
 
       document.querySelectorAll('[data-action="delete-task"]').forEach(button => {
         button.addEventListener('click', () => deleteTask(button.dataset.taskId));
+      });
+
+      // Теги в карточке задачи: кнопка раскрывает чипы, клик по чипу сразу сохраняет.
+      document.querySelectorAll('[data-action="toggle-task-tags"]').forEach(button => {
+        button.addEventListener('click', () => {
+          const card = button.closest('.task-item');
+          const editor = card ? card.querySelector('[data-task-tag-editor]') : null;
+          if (!editor) return;
+          const willOpen = editor.classList.contains('hidden');
+          document.querySelectorAll('[data-task-tag-editor]').forEach(el => el.classList.add('hidden'));
+          document.querySelectorAll('[data-action="toggle-task-tags"]').forEach(btn => { btn.textContent = 'Теги ▾'; });
+          editor.classList.toggle('hidden', !willOpen);
+          button.textContent = willOpen ? 'Готово' : 'Теги ▾';
+          if (willOpen) {
+            editor.scrollIntoView({ block: 'nearest' });
+          } else {
+            // закрыли — пересобираем детали, чтобы блок «Время по тегам» показал новые часы
+            renderProjectDetails();
+          }
+        });
+      });
+
+      document.querySelectorAll('[data-task-tag-editor]').forEach(editor => {
+        const task = state.tasks.find(item => item.id === editor.dataset.taskTagEditor);
+        if (!task) return;
+        renderInlineTagEditor(editor, task);
+
+        const input = editor.querySelector('.tag-inline-input');
+        const addInlineTag = () => {
+          const tag = normalizeTag(input ? input.value : '');
+          if (!tag) return;
+          if (!getTagOptions().includes(tag)) {
+            state.settings.tagOptions = [...(state.settings.tagOptions || []), tag];
+          }
+          const tags = getTaskTags(task);
+          if (!tags.includes(tag)) task.tags = [...tags, tag];
+          task.updatedAt = new Date().toISOString();
+          saveState();
+          if (input) input.value = '';
+          renderInlineTagEditor(editor, task);
+          updateTaskTagPills(task.id);
+        };
+
+        editor.querySelector('[data-action="add-task-tag"]')?.addEventListener('click', addInlineTag);
+        input?.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            addInlineTag();
+          } else if (event.key === 'Escape') {
+            input.value = '';
+          }
+        });
       });
 
       document.querySelectorAll('[data-action="edit-time-entry"]').forEach(button => {
