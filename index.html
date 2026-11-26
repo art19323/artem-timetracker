@@ -2421,7 +2421,7 @@
 
         <div class="box" style="margin-top: 16px;">
           <div class="box-title">
-            <h3>Время по тегам</h3>
+            <h3>Распределение времени по тегам</h3>
           </div>
           ${buildTagBreakdownHtml(project)}
         </div>
@@ -2722,55 +2722,82 @@
       return area > 0 ? (total / area) : 0;
     }
 
-    // Сколько часов ушло на каждый тег. Задача с несколькими тегами входит в каждый,
-    // поэтому доли могут давать в сумме больше 100% — это подписано под таблицей.
+    // Распределение времени по тегам — тем же видом, что и по задачам:
+    // полоса на тег, под ней задачи со своими часами.
     function buildTagBreakdownHtml(project) {
       const entries = state.timeEntries.filter(entry => entry.projectId === project.id);
       const totalHours = calculateProjectHours(project.id);
-      const byTag = new Map();
+
+      if (entries.length === 0) {
+        return '<div class="empty">По проекту ещё нет записей времени.</div>';
+      }
+
+      const groups = new Map();
       let noTagHours = 0;
-      let taggedHours = 0;
 
       entries.forEach(entry => {
         const hours = Number(entry.durationHours) || 0;
         const task = entry.taskId ? state.tasks.find(item => item.id === entry.taskId) : null;
         const tags = getTaskTags(task);
+        const name = task ? task.name : 'Без задачи';
         if (tags.length === 0) {
           noTagHours += hours;
           return;
         }
-        taggedHours += hours;
-        tags.forEach(tag => byTag.set(tag, (byTag.get(tag) || 0) + hours));
+        tags.forEach(tag => {
+          if (!groups.has(tag)) groups.set(tag, new Map());
+          const bucket = groups.get(tag);
+          const rowKey = entry.taskId || '__none__';
+          const row = bucket.get(rowKey) || { name, hours: 0 };
+          row.hours += hours;
+          bucket.set(rowKey, row);
+        });
       });
 
-      const rows = [...byTag.entries()].sort((a, b) => b[1] - a[1]);
-      if (rows.length === 0) {
-        return '<div class="empty">У задач ещё нет тегов. Отметьте теги в форме задачи (Электрика, Планировка, Отделка, Сантехника или свой) — здесь появится, сколько часов ушло на каждую работу.</div>';
+      if (groups.size === 0) {
+        return '<div class="empty">У задач ещё нет тегов — отметьте их в карточке задачи или в шапке таймера, и здесь появится распределение по электрике, отделке и остальному.</div>';
       }
 
-      const pct = hours => totalHours > 0 ? (hours / totalHours) * 100 : 0;
-      const rowHtml = (name, hours, cls) => `
-        <div class="tag-row ${cls}">
-          <span class="tag-name">${escapeHtml(name)}</span>
-          <span class="num">${formatDuration(hours)}</span>
-          <span class="num">${pct(hours).toFixed(1)}%</span>
-        </div>`;
+      const blockFor = (title, bucket, hours) => {
+        const pct = totalHours > 0 ? (hours / totalHours) * 100 : 0;
+        const rows = [...bucket.entries()]
+          .map(([, row]) => ({ name: row.name, hours: row.hours }))
+          .sort((a, b) => b.hours - a.hours);
+        return `
+          <div class="dist-stage">
+            <span>${escapeHtml(title)}</span>
+            <span class="dist-stage-hours">${formatDuration(hours)} · ${pct.toFixed(1)}%</span>
+          </div>
+          <div class="bar"><div class="bar-fill bar-fill-stage" style="width:${pct}%"></div></div>
+          ${rows.map(row => {
+            const rowPct = totalHours > 0 ? (row.hours / totalHours) * 100 : 0;
+            return `
+              <div class="dist-row dist-row-nested">
+                <div class="dist-label">
+                  <span>${escapeHtml(row.name)}</span>
+                  <span>${formatDuration(row.hours)} · ${rowPct.toFixed(1)}%</span>
+                </div>
+                <div class="bar"><div class="bar-fill" style="width:${rowPct}%"></div></div>
+              </div>`;
+          }).join('')}`;
+      };
 
-      return `<div class="tag-table">
-          <div class="tag-row head">
-            <span>Тег</span>
-            <span class="num">Часы</span>
-            <span class="num">Доля</span>
-          </div>
-          ${rows.map(([tag, hours]) => rowHtml(tag, hours, '')).join('')}
-          ${noTagHours > 0.0001 ? rowHtml('Без тега', noTagHours, 'muted-row') : ''}
-          <div class="tag-row total">
-            <span>Всего по проекту</span>
-            <span class="num">${formatDuration(totalHours)}</span>
-            <span class="num">100%</span>
-          </div>
-        </div>
-        <div class="inline-note" style="margin-top: 10px;">Часы задач с несколькими тегами входят в каждый тег — поэтому доли могут в сумме давать больше 100%. В задачах с тегами — ${formatDuration(taggedHours)}; остальное — записи с задач без тега или без задачи.</div>`;
+      const tagBlocks = [...groups.entries()]
+        .map(([tag, bucket]) => {
+          let sum = 0;
+          bucket.forEach(row => { sum += row.hours; });
+          return { tag, bucket, hours: sum };
+        })
+        .sort((a, b) => b.hours - a.hours)
+        .map(item => blockFor(item.tag, item.bucket, item.hours))
+        .join('');
+
+      const noTagBlock = noTagHours > 0.0001
+        ? blockFor('Без тега', new Map([['__none__', { name: 'Записи без задачи или без тега', hours: noTagHours }]]), noTagHours)
+        : '';
+
+      return `<div class="distribution">${tagBlocks}${noTagBlock}</div>
+        <div class="inline-note" style="margin-top: 10px">Если у задачи несколько тегов, её часы входят в каждый тег — поэтому доли могут в сумме давать больше 100%. Всего по проекту ${formatDuration(totalHours)}.</div>`;
     }
 
     function buildTaskDistributionHtml(projectId, tasks) {
